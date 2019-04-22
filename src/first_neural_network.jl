@@ -198,7 +198,7 @@ hidden_nodes = 200
 output_nodes = 10 # Equal to the number of labels in this case numbers 0 to 9 (10 elements total)
 
 # learning rate
-learning_rate = 0.3
+learning_rate = 0.1
 
 # Create instance of neural network
 inodes = input_nodes
@@ -228,13 +228,13 @@ learning_curve = fill(0,nrow(scaled_train_inputs))
         targets[label+1] = 0.99 # We +1 because the number convention starts at 0 to 9. Thus array position 6 is actually target number 5.
         wih, who, final_outputs = train(wih, who, inputs, targets; lr=learning_rate)
                 print("This is iteration ",j,"\nCheck weight links are updating ", who[1])
-        # Check what the network through the number was
+        # Check what the network thought the number was
         network_train_output = argmax(final_outputs)[1]-1 # adjust index position to account from 0 start
         if (label == network_train_output)
-            # network's answer matches correct answer, add 1 to scorecard
+            # network's answer matches correct answer, add 1 to learning curve
             learning_curve[j] = 1
         else
-            # network's answer doesn't match correct answer, add 0 to scorecard
+            # network's answer doesn't match correct answer, add 0 to learning curve
             learning_curve[j] = 0
             end
         end
@@ -247,8 +247,6 @@ print(learning_curve)
 
 # Plot the learning curve
 plot(cumsum(learning_curve),title="Learning Curve")
-
-print(learning_curve)
 
 # Call the network on an indivdual entry
 example_call = inputs = rotr90(convert(Array{Float64},scaled_test_inputs[500,2:length(scaled_test_inputs)]))
