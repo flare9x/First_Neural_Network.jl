@@ -7,7 +7,7 @@
 #    end
 #end
 
-# Back propogation neural netowrk
+# Back propogation neural network
 # 'Hello World' of neural networks
 # Andrew Bannerman 4.21.2019
 
@@ -15,6 +15,7 @@
 # Cheat Sheet = https://ml-cheatsheet.readthedocs.io/en/latest/forwardpropagation.html
 # Matrix multiplication Rules - https://www.mathsisfun.com/algebra/matrix-multiplying.html
 # How to get MNIST data as a CSV https://pjreddie.com/projects/mnist-in-csv/
+# Kaggle - https://www.kaggle.com/ngbolin/mnist-dataset-digit-recognizer
 
 # Needed packages
 using DataFrames
@@ -95,7 +96,7 @@ end
 # Step 3 - Update the link weights in proporation to the error (ie if a link weight is higher than another link weight to same node - adjust the larger weight by the bigger fraciton)
 # Output Errors = targets - final_outputs
 # Hidden layer output errors = who' * output_errors
-# Using chain rule - update the link weights from the hidden layer to output (who) and again for the input to the hidden layer (whi)
+# Using chain rule - update the link weights from the hidden layer to output (who) and again for the input to the hidden layer (wih)
 # This updating of weights is how the network learns!
 function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float64,2}, targets::Array{Float64,2};  lr::Float64=0.1) #wih, who, lr, inputs, targets)
     # Matrix multiplication Rules - https://www.mathsisfun.com/algebra/matrix-multiplying.html
@@ -198,7 +199,7 @@ hidden_nodes = 200
 output_nodes = 10 # Equal to the number of labels in this case numbers 0 to 9 (10 elements total)
 
 # learning rate
-learning_rate = 0.1
+learning_rate = 0.01
 
 # Create instance of neural network
 inodes = input_nodes
@@ -209,16 +210,17 @@ wih = randn(hnodes,inodes) * inodes^(-0.5)
 who = randn(onodes,hnodes) * hnodes^(-0.5)
 
 # Train the neural network
+# 4.22.2019 - Add functinality to save the numbers which the network did not get correct
 # Epochs is the number of times the training data set is used for training
-epochs = 5
+epochs = 20
 # Initialize training progress
 learning_curve = fill(0,nrow(scaled_train_inputs))
 # Check that the neural network is converging
+j =1
 @inbounds for i in 1:epochs
     # go through all records in the training data set
     @inbounds for j in 1:nrow(scaled_train_inputs)
-        let wih = wih, who = who
-        # scale and shift the inputs
+        # Subset by row [j,1] = label [j,2:length(scaled_train_inputs)] is the scaled image data
         label = Int64.(scaled_train_inputs[j,1])
         inputs = rotr90(convert(Array{Float64},scaled_train_inputs[j,2:length(scaled_train_inputs)])) # rotr90() for changing dim to [784,1] from [1,784] to meet matrix multiplication rules
         # create the target output values (all 0.01, except the desired label which is 0.99)
@@ -226,8 +228,7 @@ learning_curve = fill(0,nrow(scaled_train_inputs))
         targets .= 0.01 .+ targets
         # Set the target .99 to the correct index position within the target array
         targets[label+1] = 0.99 # We +1 because the number convention starts at 0 to 9. Thus array position 6 is actually target number 5.
-        wih, who, final_outputs = train(wih, who, inputs, targets; lr=learning_rate)
-                print("This is iteration ",j,"\nCheck weight links are updating ", who[1])
+        global wih, who, final_outputs = train(wih, who, inputs, targets; lr=learning_rate)
         # Check what the network thought the number was
         network_train_output = argmax(final_outputs)[1]-1 # adjust index position to account from 0 start
         if (label == network_train_output)
@@ -236,8 +237,12 @@ learning_curve = fill(0,nrow(scaled_train_inputs))
         else
             # network's answer doesn't match correct answer, add 0 to learning curve
             learning_curve[j] = 0
-            end
         end
+        if (j == 1)
+            global learning_curve = fill(0,nrow(scaled_train_inputs))
+        end
+        print("This is epoch ",i,"\nThis is iteration ",j,"\nCheck hidden layer output weight links are updating ", who[1],"\n")
+        print("Training Accuracy ",(sum(learning_curve) / j),"\n")
     end
 end
 
@@ -290,8 +295,12 @@ i=1
         # network's answer doesn't match correct answer, add 0 to scorecard
         scorecard[i] = 0
         end
+        print("Accuracy ",sum(scorecard) / i,"\n")
     end
 end
 
 # Percentage Correct
 percentage = sum(scorecard) / size(scorecard,1)
+
+# Change log
+# 4.22.2019 - added a % print function to check train / test accuracy
