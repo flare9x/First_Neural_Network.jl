@@ -134,7 +134,6 @@ function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float6
     wih .= wih .+ (lr .* (hidden_errors .* hidden_outputs .* (1.0 .- hidden_outputs)) * inputs')
 
     return(wih, who, final_outputs)
-
 end
 
 #=
@@ -214,7 +213,6 @@ who = randn(onodes,hnodes) * hnodes^(-0.5)
 epochs = 5
 # Initialize training progress
 learning_curve = fill(0,nrow(scaled_train_inputs))
-
 # Check that the neural network is converging
 @inbounds for i in 1:epochs
     # go through all records in the training data set
@@ -253,21 +251,23 @@ plot(cumsum(learning_curve),title="Learning Curve")
 print(learning_curve)
 
 # Call the network on an indivdual entry
-example_call = inputs = rotr90(convert(Array{Float64},scaled_test_inputs[1,2:length(scaled_test_inputs)]))
+example_call = inputs = rotr90(convert(Array{Float64},scaled_test_inputs[500,2:length(scaled_test_inputs)]))
 example_call_image = rotl90(reshape(example_call,28,28))
 # Plot Number
 heatmap(example_call_image)
 # Grab the known correct label
-correct_label = scaled_test_inputs[1,1]
+correct_label = scaled_test_inputs[500,1]
 # Apply the trained network to the input example
 outputs = query(wih, who, example_call)
 # Check what the label thought the number was
 network_label = argmax(outputs)[1]-1
-if network_label =  correct_label
-    print("The neural network correctly identified the hand written number")
+if network_label ==  correct_label
+    print("The neural network correctly identified the hand written number - ", network_label)
 else
     print("The neural network incorrectly identified the hand written number")
 end
+
+print(example_call_image)
 
 # Test the neural network
 # Initialize the scorecard output the same size as the number of test set labels
@@ -276,7 +276,7 @@ scorecard = fill(0,nrow(scaled_test_inputs))
 # Input the test set data over the trained neural network to see how well it does
 i=1
 @inbounds for i in 1:nrow(scaled_test_inputs)
-    let wih = wih, who = who, inputs = inputs
+    let wih = wih, who = who
     correct_label = Int64.(scaled_test_inputs[i,1])
     inputs = rotr90(convert(Array{Float64},scaled_test_inputs[i,2:length(scaled_test_inputs)])) # rotr90() for changing dim to [784,1] from [1,784] to meet matrix multiplication rules
     # query the network
