@@ -245,9 +245,29 @@ end
 
 sum(learning_curve) / 60000
 
+print(learning_curve)
+
 # Plot the learning curve
 plot(cumsum(learning_curve),title="Learning Curve")
 
+print(learning_curve)
+
+# Call the network on an indivdual entry
+example_call = inputs = rotr90(convert(Array{Float64},scaled_test_inputs[1,2:length(scaled_test_inputs)]))
+example_call_image = rotl90(reshape(example_call,28,28))
+# Plot Number
+heatmap(example_call_image)
+# Grab the known correct label
+correct_label = scaled_test_inputs[1,1]
+# Apply the trained network to the input example
+outputs = query(wih, who, example_call)
+# Check what the label thought the number was
+network_label = argmax(outputs)[1]-1
+if network_label =  correct_label
+    print("The neural network correctly identified the hand written number")
+else
+    print("The neural network incorrectly identified the hand written number")
+end
 
 # Test the neural network
 # Initialize the scorecard output the same size as the number of test set labels
