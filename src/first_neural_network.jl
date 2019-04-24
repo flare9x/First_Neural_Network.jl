@@ -1,4 +1,4 @@
-#io = open("C:/Users/Andrew.Bannerman/Desktop/Julia/My_First_Neural_Network/Data/train-images-idx3-ubyte/train-images.idx3-ubyte", n=28)
+io = open("C:/Users/Andrew.Bannerman/Desktop/Julia/My_First_Neural_Network/Data/train-images-idx3-ubyte/train-images.idx3-ubyte", n=28)
 #write(io)
 
 #open("C:/Users/Andrew.Bannerman/Desktop/Julia/My_First_Neural_Network/Data/train-images-idx3-ubyte/train-images.idx3-ubyte") do file
@@ -28,12 +28,10 @@ using Random
 Random.seed!(123) # Setting the seed
 d = Normal()
 x = rand(d, 100)
-
 x = rand(Normal(100, 2), 100)
 vars = var(x)
 sqrt(vars)
 histogram(x)
-
 =#
 
 # Train and test set data preparation
@@ -98,7 +96,7 @@ end
 # Hidden layer output errors = who' * output_errors
 # Using chain rule - update the link weights from the hidden layer to output (who) and again for the input to the hidden layer (wih)
 # This updating of weights is how the network learns!
-function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float64,2}, targets::Array{Float64,2};  lr::Float64=0.1) #wih, who, lr, inputs, targets)
+function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float64,2}, targets::Array{Float64,2}; lr::Float64=0.1, drop_out::Bool=true) #wih, who, lr, inputs, targets)
     # Matrix multiplication Rules - https://www.mathsisfun.com/algebra/matrix-multiplying.html
     # [m * n] * [n * p] = [m * p] # the last n must match the first n
     # [row, column]
@@ -108,7 +106,12 @@ function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float6
 
     # Apply sigmoid function to each element the hidden layer output
     # hidden_inputs dim = [200, 1]
+    if drop_out == false
     hidden_outputs = sigmoid.(hidden_inputs)
+    elseif drop_out == true
+    hidden_outputs = sigmoid.(hidden_inputs)
+    hidden_outputs .* rand(Binomial(), hnodes) # Apply drop out by hidden output * 0,1's
+    end
 
     # Apply the weights to the hidden layer outputs which then are the final layers inputs
     # who dims = [10,200]
@@ -118,6 +121,12 @@ function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float6
     # Apply sigmoid function to each element the final layer output
     # final_inputs dim = [10,1]
     final_outputs = sigmoid.(final_inputs)
+    if drop_out == false
+    final_outputs = sigmoid.(final_inputs)
+    elseif drop_out == true
+    final_outputs = sigmoid.(final_inputs)
+    final_outputs .* rand(Binomial(), onodes) # Apply drop out by hidden output * 0,1's
+    end
 
     # output layer error is the (target - actual)
     # output_errors dim = [10,1]
@@ -145,10 +154,8 @@ end
 w11 = 6.0  # weight 1, 1 means node connection 1 to node 1
 w21 = 3.0 # weight 2, 1 means node connection 2 to 1
 refine_w11 = w11 / (w11+w21) # 2.3
-
 # Fraction of e1 to refine w21
 refine_w11 = w21 / (w21+w11) # 1/3
-
 # Recombine split errors for the links using the error backpropogation
 # ehidden,1 = sum of split errors on links w11 and w12
 # Link weights beween hidden and output layer example
@@ -162,7 +169,6 @@ e2 = 0.5 # final output error
 error_out_e1 = e1 * (w11 / (w11 + w21)) + e2 * (w12 / (w12 + w22)) # Sum of split errors
 # Flip to find the other summed link error
 error_out_e2 = e2 * (w22 / (w22 + w12)) + e1 * (w21 / (w21 + w11)) # Sum of split errors
-
 # Back propogate error_out_e1 and error_out_e2 to the hidden layer input weights
 w11 = 3.0
 w12 = 1.0
@@ -172,7 +178,6 @@ e1 = error_out_e1 # Hidden layer output sum of proportional errors
 e2 = error_out_e2 # Hidden layer output sum of proportional errors
 error_out_e1 = e1 * (w11 / (w11 + w21)) + e2 * (w12 / (w12 + w22)) # Sum of split errors
 error_out_e2 = e2 * (w22 / (w22 + w12)) + e1 * (w21 / (w21 + w11))
-
 # simply in matrix
 (w11 / (w11 + w21)) (w12 / (w12 + w22))     e1
 (w21 / (w21 + w11)) (w22 / (w22 + w12))     e2
@@ -228,7 +233,7 @@ j =1
         targets .= 0.01 .+ targets
         # Set the target .99 to the correct index position within the target array
         targets[label+1] = 0.99 # We +1 because the number convention starts at 0 to 9. Thus array position 6 is actually target number 5.
-        global wih, who, final_outputs = train(wih, who, inputs, targets; lr=learning_rate)
+        global wih, who, final_outputs = train(wih, who, inputs, targets; lr=learning_rate,drop_out=true)
         # Check what the network thought the number was
         network_train_output = argmax(final_outputs)[1]-1 # adjust index position to account from 0 start
         if (label == network_train_output)
@@ -304,3 +309,4 @@ percentage = sum(scorecard) / size(scorecard,1)
 
 # Change log
 # 4.22.2019 - added a % print function to check train / test accuracy
+# 4.23.2019 - Added first implemntation of drop out (note need to include probability)
