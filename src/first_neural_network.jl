@@ -1,4 +1,4 @@
-io = open("C:/Users/Andrew.Bannerman/Desktop/Julia/My_First_Neural_Network/Data/train-images-idx3-ubyte/train-images.idx3-ubyte", n=28)
+# io = open("C:/Users/Andrew.Bannerman/Desktop/Julia/My_First_Neural_Network/Data/train-images-idx3-ubyte/train-images.idx3-ubyte", n=28)
 #write(io)
 
 #open("C:/Users/Andrew.Bannerman/Desktop/Julia/My_First_Neural_Network/Data/train-images-idx3-ubyte/train-images.idx3-ubyte") do file
@@ -217,7 +217,7 @@ who = randn(onodes,hnodes) * hnodes^(-0.5)
 # Train the neural network
 # 4.22.2019 - Add functinality to save the numbers which the network did not get correct
 # Epochs is the number of times the training data set is used for training
-epochs = 20
+epochs = 5
 # Initialize training progress
 learning_curve = fill(0,nrow(scaled_train_inputs))
 # Check that the neural network is converging
