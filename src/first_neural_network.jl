@@ -16,6 +16,7 @@
 # Matrix multiplication Rules - https://www.mathsisfun.com/algebra/matrix-multiplying.html
 # How to get MNIST data as a CSV https://pjreddie.com/projects/mnist-in-csv/
 # Kaggle - https://www.kaggle.com/ngbolin/mnist-dataset-digit-recognizer
+# RelU activation functions variants https://medium.com/tinymind/a-practical-guide-to-relu-b83ca804f1f7 + Julia: https://int8.io/neural-networks-in-julia-hyperbolic-tangent-and-relu/
 
 # Needed packages
 using DataFrames
@@ -84,6 +85,8 @@ function sigmoid(x)
     return 1 / (1.0 + exp(-x))
 end
 
+
+
 # Create the training function
 # Step 1 - feed the data through the 3 layers whilst adjusting the inputs by link weights + squishing with sigmoid function at each output node.
 # Layer 1 = inputs (inputs * weights)
@@ -110,7 +113,7 @@ function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float6
     hidden_outputs = sigmoid.(hidden_inputs)
     elseif drop_out == true
     hidden_outputs = sigmoid.(hidden_inputs)
-    hidden_outputs .* rand(Binomial(1,drop_out_p), hnodes) # Apply drop out by hidden output * 0,1's
+    hidden_outputs .* rand(Binomial(1,drop_out_p), hnodes) ./ drop_out_p # Apply drop out by hidden output * 0,1's / p (1/p - scaled so we dont need to apply at test time)(inverted dropout)
     end
 
     # Apply the weights to the hidden layer outputs which then are the final layers inputs
@@ -125,7 +128,7 @@ function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float6
     final_outputs = sigmoid.(final_inputs)
     elseif drop_out == true
     final_outputs = sigmoid.(final_inputs)
-    final_outputs .* rand(Binomial(1,drop_out_p), onodes) # Apply drop out by hidden output * 0,1's
+    final_outputs .* rand(Binomial(1,drop_out_p), onodes) ./ drop_out_p # Apply drop out by hidden output * 0,1's / p (1/p - scaled so we dont need to apply at test time)(inverted dropout)
     end
 
     # output layer error is the (target - actual)
@@ -217,9 +220,10 @@ who = randn(onodes,hnodes) * hnodes^(-0.5)
 # Train the neural network
 # 4.22.2019 - Add functinality to save the numbers which the network did not get correct
 # Epochs is the number of times the training data set is used for training
-epochs = 5
+epochs = 20
 # Initialize training progress
 learning_curve = fill(0,nrow(scaled_train_inputs))
+training_accuracy = fill(0,nrow(scaled_train_inputs))
 # Check that the neural network is converging
 j =1
 @inbounds for i in 1:epochs
@@ -248,6 +252,7 @@ j =1
         end
         print("This is epoch ",i,"\nThis is iteration ",j,"\nCheck hidden layer output weight links are updating ", who[1],"\n")
         print("Training Accuracy ",(sum(learning_curve) / j),"\n")
+        training_accuracy[i] = (sum(learning_curve) / j)
     end
 end
 
@@ -309,4 +314,4 @@ percentage = sum(scorecard) / size(scorecard,1)
 
 # Change log
 # 4.22.2019 - added a % print function to check train / test accuracy
-# 4.23.2019 - Added first implemntation of drop out 
+# 4.23.2019 - Added first implemntation of drop out
