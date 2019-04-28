@@ -223,7 +223,7 @@ who = randn(onodes,hnodes) * hnodes^(-0.5)
 epochs = 20
 # Initialize training progress
 learning_curve = fill(0,nrow(scaled_train_inputs))
-training_accuracy = fill(0,nrow(scaled_train_inputs))
+training_accuracy = fill(0.0,nrow(scaled_train_inputs))
 # Check that the neural network is converging
 j =1
 @inbounds for i in 1:epochs
@@ -285,6 +285,7 @@ print(example_call_image)
 # Test the neural network
 # Initialize the scorecard output the same size as the number of test set labels
 scorecard = fill(0,nrow(scaled_test_inputs))
+test_accuracy = fill(0.0,nrow(scaled_test_inputs))
 
 # Input the test set data over the trained neural network to see how well it does
 i=1
@@ -306,6 +307,7 @@ i=1
         scorecard[i] = 0
         end
         print("Accuracy ",sum(scorecard) / i,"\n")
+        test_accuracy[i] = sum(scorecard) / i
     end
 end
 

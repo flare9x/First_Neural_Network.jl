@@ -30,16 +30,6 @@ using Distributions
 using Plots
 using Random
 
-d = Binomial()
-x = rand(Binomial(), 3,3)
-rand(3,3)
-
-rand([np.ones((10,hidden_dim))],1-dropout_percent))
-
-test = np.random.binomial([np.ones((10,hidden_dim))],1-dropout_percent)[0] * (1.0/(1-.2))
-
-zeros(rand(d), (2, 3))
-
 #=
 Random.seed!(123) # Setting the seed
 d = Normal()
@@ -115,8 +105,7 @@ end
 # Hidden layer output errors = who' * output_errors
 # Using chain rule - update the link weights from the hidden layer to output (who) and again for the input to the hidden layer (wih)
 # This updating of weights is how the network learns!
-
-function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float64,2}, targets::Array{Float64,2}; lr::Float64=0.1, drop_out::Bool=true) #wih, who, lr, inputs, targets)
+function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float64,2}, targets::Array{Float64,2}; lr::Float64=0.1, drop_out::Bool=true, drop_out_p::Float64=.8) #wih, who, lr, inputs, targets)
     # Matrix multiplication Rules - https://www.mathsisfun.com/algebra/matrix-multiplying.html
     # [m * n] * [n * p] = [m * p] # the last n must match the first n
     # [row, column]
@@ -130,7 +119,7 @@ function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float6
     hidden_outputs = sigmoid.(hidden_inputs)
     elseif drop_out == true
     hidden_outputs = sigmoid.(hidden_inputs)
-    hidden_outputs .* rand(Binomial(), hnodes) # Apply drop out by hidden output * 0,1's
+    hidden_outputs .* rand(Binomial(1,drop_out_p), hnodes) ./ drop_out_p # Apply drop out by hidden output * 0,1's / p (1/p - scaled so we dont need to apply at test time)(inverted dropout)
     end
 
     # Apply the weights to the hidden layer outputs which then are the final layers inputs
@@ -145,7 +134,7 @@ function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float6
     final_outputs = sigmoid.(final_inputs)
     elseif drop_out == true
     final_outputs = sigmoid.(final_inputs)
-    final_outputs .* rand(Binomial(), onodes) # Apply drop out by hidden output * 0,1's
+    final_outputs .* rand(Binomial(1,drop_out_p), onodes) ./ drop_out_p # Apply drop out by hidden output * 0,1's / p (1/p - scaled so we dont need to apply at test time)(inverted dropout)
     end
 
     # output layer error is the (target - actual)
@@ -165,7 +154,6 @@ function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float6
 
     return(wih, who, final_outputs)
 end
-
 #=
 # Example of link weight updating (prior to using calclus chain rule)
 # Refine weight on output node (1x node example with two w11 and w21 connected links)
@@ -209,21 +197,21 @@ error_out_e2 = e2 * (w22 / (w22 + w12)) + e1 * (w21 / (w21 + w11))
 
 # Function for applying the network to unseen or test data not seen (trained) by the network before
 function query(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float64,2})
-    # calculate signals into hidden layer
-    hidden_inputs = wih * inputs
-    # calculate the signals emerging from hidden layer
-    hidden_outputs = sigmoid.(hidden_inputs)
+   # calculate signals into hidden layer
+   hidden_inputs = wih * inputs
+   # calculate the signals emerging from hidden layer
+   hidden_outputs = sigmoid.(hidden_inputs)
 
-    # calculate signals into final output layer
-    final_inputs = who * hidden_outputs
-    # calculate the signals emerging from final output layer
-    final_outputs = sigmoid.(final_inputs)
+   # calculate signals into final output layer
+   final_inputs = who * hidden_outputs
+   # calculate the signals emerging from final output layer
+   final_outputs = sigmoid.(final_inputs)
 
-    return(final_outputs)
+   return(final_outputs)
 end
 
 # Number of input, hidden and output nodes
-input_nodes = length(test_set) # equal to the size of the 28 * 28 image (784 elements)
+input_nodes = length(train_set) # equal to the size of the 28 * 28 image (784 elements)
 hidden_nodes = 200
 output_nodes = 10 # Equal to the number of labels in this case numbers 0 to 9 (10 elements total)
 
@@ -237,33 +225,6 @@ onodes = output_nodes
 # As randn generates numbers from a standard normal distribution we have to multiply by the standard deviation
 wih = randn(hnodes,inodes) * inodes^(-0.5)
 who = randn(onodes,hnodes) * hnodes^(-0.5)
-drop_m_wih = rand(Binomial(), hnodes,inodes)
-drop_m_who = rand(Binomial(1), onodes,hnodes)
-
-Binomial(1)
-
-function binompvec(n::Int, p::Float64)
-    pv = Vector{Float64}(undef, n+1)
-    if p == 0.0
-        fill!(pv, 0.0)
-        pv[1] = 1.0
-    elseif p == 1.0
-        fill!(pv, 0.0)
-        pv[n+1] = 1.0
-    else
-        q = 1.0 - p
-        a = p / q
-        @inbounds pv[1] = pk = q ^ n
-        for k = 1:n
-            @inbounds pv[k+1] = (pk *= ((n - k + 1) / k) * a)
-        end
-    end
-    return pv
-end
-
-binompvec(1, 0.5)
-
-rand(zeros(784))
 
 # Train the neural network
 # 4.22.2019 - Add functinality to save the numbers which the network did not get correct
@@ -271,35 +232,37 @@ rand(zeros(784))
 epochs = 20
 # Initialize training progress
 learning_curve = fill(0,nrow(scaled_train_inputs))
+training_accuracy = fill(0.0,nrow(scaled_train_inputs))
 # Check that the neural network is converging
 j =1
 @inbounds for i in 1:epochs
-    # go through all records in the training data set
-    @inbounds for j in 1:nrow(scaled_train_inputs)
-        # Subset by row [j,1] = label [j,2:length(scaled_train_inputs)] is the scaled image data
-        label = Int64.(scaled_train_inputs[j,1])
-        inputs = rotr90(convert(Array{Float64},scaled_train_inputs[j,2:length(scaled_train_inputs)])) # rotr90() for changing dim to [784,1] from [1,784] to meet matrix multiplication rules
-        # create the target output values (all 0.01, except the desired label which is 0.99)
-        targets = zeros(10,1)
-        targets .= 0.01 .+ targets
-        # Set the target .99 to the correct index position within the target array
-        targets[label+1] = 0.99 # We +1 because the number convention starts at 0 to 9. Thus array position 6 is actually target number 5.
-        global wih, who, final_outputs = train(wih, who, inputs, targets; lr=learning_rate,drop_out=true)
-        # Check what the network thought the number was
-        network_train_output = argmax(final_outputs)[1]-1 # adjust index position to account from 0 start
-        if (label == network_train_output)
-            # network's answer matches correct answer, add 1 to learning curve
-            learning_curve[j] = 1
-        else
-            # network's answer doesn't match correct answer, add 0 to learning curve
-            learning_curve[j] = 0
-        end
-        if (j == 1)
-            global learning_curve = fill(0,nrow(scaled_train_inputs))
-        end
-        print("This is epoch ",i,"\nThis is iteration ",j,"\nCheck hidden layer output weight links are updating ", who[1],"\n")
-        print("Training Accuracy ",(sum(learning_curve) / j),"\n")
-    end
+   # go through all records in the training data set
+   @inbounds for j in 1:nrow(scaled_train_inputs)
+       # Subset by row [j,1] = label [j,2:length(scaled_train_inputs)] is the scaled image data
+       label = Int64.(scaled_train_inputs[j,1])
+       inputs = rotr90(convert(Array{Float64},scaled_train_inputs[j,2:length(scaled_train_inputs)])) # rotr90() for changing dim to [784,1] from [1,784] to meet matrix multiplication rules
+       # create the target output values (all 0.01, except the desired label which is 0.99)
+       targets = zeros(10,1)
+       targets .= 0.01 .+ targets
+       # Set the target .99 to the correct index position within the target array
+       targets[label+1] = 0.99 # We +1 because the number convention starts at 0 to 9. Thus array position 6 is actually target number 5.
+       global wih, who, final_outputs = train(wih, who, inputs, targets; lr=learning_rate,drop_out=true,drop_out_p=.8)
+       # Check what the network thought the number was
+       network_train_output = argmax(final_outputs)[1]-1 # adjust index position to account from 0 start
+       if (label == network_train_output)
+           # network's answer matches correct answer, add 1 to learning curve
+           learning_curve[j] = 1
+       else
+           # network's answer doesn't match correct answer, add 0 to learning curve
+           learning_curve[j] = 0
+       end
+       if (j == 1)
+           global learning_curve = fill(0,nrow(scaled_train_inputs))
+       end
+       print("This is epoch ",i,"\nThis is iteration ",j,"\nCheck hidden layer output weight links are updating ", who[1],"\n")
+       print("Training Accuracy ",(sum(learning_curve) / j),"\n")
+       training_accuracy[i] = (sum(learning_curve) / j)
+   end
 end
 
 sum(learning_curve) / 60000
@@ -332,6 +295,7 @@ print(example_call_image)
 # Test the neural network
 # Initialize the scorecard output the same size as the number of test set labels
 scorecard = fill(0,nrow(scaled_test_inputs))
+test_accuracy = fill(0.0,nrow(scaled_test_inputs))
 kaggle_out = fill(0.0,nrow(scaled_test_inputs))
 kaggle_out = DataFrame(ImageId = collect(1:nrow(scaled_test_inputs)), Label = kaggle_out)
 
@@ -348,6 +312,7 @@ i=1
     label = argmax(outputs)[1]-1 # adjust index position to account from 0 start
     # Kaggle out
     kaggle_out[i,2] = label
+    test_accuracy[i] = sum(scorecard) / i
     # append correct or incorrect to list
     #if (label == correct_label)
         # network's answer matches correct answer, add 1 to scorecard
