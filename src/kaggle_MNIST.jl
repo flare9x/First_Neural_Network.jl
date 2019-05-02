@@ -24,32 +24,23 @@
 # 4.22.19 - bias
 
 # Needed packages
+
 using DataFrames
 using CSV
 using Distributions
 using Plots
 using Random
+using Images, CoordinateTransformations, TestImages, OffsetArrays, CoordinateTransformations
+using PaddedViews
 
-#=
-Random.seed!(123) # Setting the seed
-d = Normal()
-x = rand(d, 100)
-
-x = rand(Normal(100, 2), 100)
-vars = var(x)
-sqrt(vars)
-histogram(x)
-
-=#
 
 # Train and test set data preparation
-
 # Load MNIST Data set from .csv format
 train_set = CSV.read("C:/Users/Andrew.Bannerman/Desktop/Julia/First_Neural_Network.jl/kaggle/MNIST/train.csv",header=true,types=fill(Float64,785)) # "C:/Users/Andrew.Bannerman/Desktop/Julia/My_First_Neural_Network/Data/mnist_train.csv"
 test_set = CSV.read("C:/Users/Andrew.Bannerman/Desktop/Julia/First_Neural_Network.jl/kaggle/MNIST/test.csv",header=true,types=fill(Float64,784)) # "C:/Users/Andrew.Bannerman/Desktop/Julia/My_First_Neural_Network/Data/mnist_test.csv"
 
 # Plot Example image
-example = convert(Array{Float64}, train_set[2,2:length(train_set)])
+example = Float64.(train_set[4,2:size(train_set,2)])
 example = rotl90(reshape(example,28,28))
 heatmap(example)
 
@@ -58,32 +49,71 @@ train_label = train_set[:,1]
 test_label = test_set[:,1]
 
 # Extract Data and exclude the label in the first column
-train_set = train_set[:,2:length(train_set)]
-test_set = test_set[:,1:length(test_set)]
+train_set = train_set[:,2:size(train_set,2)]
+test_set = test_set[:,1:size(test_set,2)]
 
 # Pre process - Scale the inputs to a range of 0.01 to 1.00
-m_train = Array{Float64}(zeros(nrow(train_set),length(train_set))) # empty matrix
+m_train = Array{Float64}(zeros(nrow(train_set),size(train_set,2))) # empty matrix
 @inbounds for i in 1:nrow(train_set)
-    @inbounds for j in 1:length(train_set)
+    @inbounds for j in 1:size(train_set,2)
     m_train[i,j] = (train_set[i,j] / 255.0 * 0.99) + 0.01
     end
 end
 
-m_test = Array{Float64}(zeros(nrow(test_set),length(test_set))) # empty matrix
+m_test = Array{Float64}(zeros(nrow(test_set),size(test_set,2))) # empty matrix
 @inbounds for i in 1:nrow(test_set)
-    @inbounds for j in 1:length(test_set)
+    @inbounds for j in 1:size(test_set,2)
     m_test[i,j] = (test_set[i,j] / 255.0 * 0.99) + 0.01
     end
 end
 
 # Convert matrix to DataFrame and append the labels back to the train and test set
-scaled_train_inputs = DataFrame(hcat(train_label,m_train))
+scaled_orig_train_inputs = DataFrame(hcat(train_label,m_train))
 scaled_test_inputs = DataFrame(hcat(m_test))
 
 # Plot the new scale example
-example = convert(Array{Float64}, scaled_test_inputs[7,1:length(scaled_test_inputs)])
+example = Float64.(scaled_test_inputs[7,1:length(scaled_test_inputs)])
 example = rotl90(reshape(example,28,28))
 heatmap(example)
+
+# Data Augmentation
+training_set_aug_minus = zeros(nrow(scaled_orig_train_inputs),ncol(scaled_orig_train_inputs))
+training_set_aug_plus = zeros(nrow(scaled_orig_train_inputs),ncol(scaled_orig_train_inputs))
+degree_rot_minus = -.2
+degree_rot_plus = .2
+i=1
+for i in 1:nrow(scaled_orig_train_inputs)
+        label = scaled_orig_train_inputs[i,1]
+        example = Float64.(scaled_orig_train_inputs[i,2:size(scaled_orig_train_inputs,2)])
+        example = rotl90(reshape(example,28,28))
+        #rot_minus = LinearMap(RotMatrix(degree_rot_minus))
+        #rot_plus = LinearMap(RotMatrix(degree_rot_plus))
+        #imgw_minus = warp(example_minus, rot_minus, axes(example_plus)) #  axes(example_minus) = crops
+        #imgw_plus = warp(example_plus, rot_plus, axes(example_plus)) # axes() = crops
+        imgw_minus = imrotate(example, degree_rot_minus, axes(example))
+        imgw_plus = imrotate(example, degree_rot_plus, axes(example))
+        imgw_minus = reshape(imgw_minus,1,784)
+        imgw_plus = reshape(imgw_plus,1,784)
+            for k in 1:size(imgw_minus,2)
+                if isnan(imgw_minus[k]) # Convert NaN to 0.0
+                    imgw_minus[k] = 0.0
+                end
+                if isnan(imgw_plus[k]) # Convert NaN to 0.0
+                    imgw_plus[k] = 0.0
+                end
+            end
+            imgw_plus .= (imgw_plus ./ 255.0 .* 0.99) .+ 0.01 # Scale the outputs
+            imgw_minus .= (imgw_minus ./ 255.0 .* 0.99) .+ 0.01 # Scale the outputs
+            training_set_aug_minus[i,1] = label
+            training_set_aug_minus[i,2:size(scaled_orig_train_inputs,2)] = imgw_minus
+            training_set_aug_plus[i,1] = label
+            training_set_aug_plus[i,2:size(scaled_orig_train_inputs,2)] = imgw_plus
+        print("This is iteration i",i,"\n")
+    end
+
+# Combine augmented data with the original
+# note may want to add shuffling?
+scaled_train_inputs = DataFrame(vcat(scaled_orig_train_inputs,training_set_aug_minus,training_set_aug_plus))
 
 # Build the back propogation neural network
 
@@ -211,7 +241,7 @@ function query(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float6
 end
 
 # Number of input, hidden and output nodes
-input_nodes = length(train_set) # equal to the size of the 28 * 28 image (784 elements)
+input_nodes = size(train_set,2)-1 # equal to the size of the 28 * 28 image (784 elements)
 hidden_nodes = 200
 output_nodes = 10 # Equal to the number of labels in this case numbers 0 to 9 (10 elements total)
 
@@ -229,24 +259,23 @@ who = randn(onodes,hnodes) * hnodes^(-0.5)
 # Train the neural network
 # 4.22.2019 - Add functinality to save the numbers which the network did not get correct
 # Epochs is the number of times the training data set is used for training
-epochs = 20
+epochs = 10
 # Initialize training progress
 learning_curve = fill(0,nrow(scaled_train_inputs))
 training_accuracy = fill(0.0,nrow(scaled_train_inputs))
 # Check that the neural network is converging
-j =1
 @inbounds for i in 1:epochs
    # go through all records in the training data set
    @inbounds for j in 1:nrow(scaled_train_inputs)
        # Subset by row [j,1] = label [j,2:length(scaled_train_inputs)] is the scaled image data
        label = Int64.(scaled_train_inputs[j,1])
-       inputs = rotr90(convert(Array{Float64},scaled_train_inputs[j,2:length(scaled_train_inputs)])) # rotr90() for changing dim to [784,1] from [1,784] to meet matrix multiplication rules
+       inputs = reshape(Float64.(scaled_train_inputs[j,2:length(scaled_train_inputs)]),784,1) # rotr90() for changing dim to [784,1] from [1,784] to meet matrix multiplication rules
        # create the target output values (all 0.01, except the desired label which is 0.99)
        targets = zeros(10,1)
        targets .= 0.01 .+ targets
        # Set the target .99 to the correct index position within the target array
        targets[label+1] = 0.99 # We +1 because the number convention starts at 0 to 9. Thus array position 6 is actually target number 5.
-       global wih, who, final_outputs = train(wih, who, inputs, targets; lr=learning_rate,drop_out=true,drop_out_p=.8)
+       global wih, who, final_outputs = train(wih, who, inputs, targets; lr=learning_rate,drop_out=true,drop_out_p=.5)
        # Check what the network thought the number was
        network_train_output = argmax(final_outputs)[1]-1 # adjust index position to account from 0 start
        if (label == network_train_output)
@@ -261,19 +290,15 @@ j =1
        end
        print("This is epoch ",i,"\nThis is iteration ",j,"\nCheck hidden layer output weight links are updating ", who[1],"\n")
        print("Training Accuracy ",(sum(learning_curve) / j),"\n")
-       training_accuracy[i] = (sum(learning_curve) / j)
+       training_accuracy[j] = (sum(learning_curve) / j)
    end
 end
 
-sum(learning_curve) / 60000
-
-print(learning_curve)
-
 # Plot the learning curve
-plot(cumsum(learning_curve),title="Learning Curve")
+plot(training_accuracy,title="Training Accuracy")
 
 # Call the network on an indivdual entry
-example_call = inputs = rotr90(convert(Array{Float64},scaled_test_inputs[55,1:length(scaled_test_inputs)]))
+example_call = Float64.(scaled_test_inputs[55,1:length(scaled_test_inputs)])
 example_call_image = rotl90(reshape(example_call,28,28))
 # Plot Number
 heatmap(example_call_image)
@@ -290,8 +315,6 @@ else
     print("The neural network incorrectly identified the hand written number")
 end
 
-print(example_call_image)
-
 # Test the neural network
 # Initialize the scorecard output the same size as the number of test set labels
 scorecard = fill(0,nrow(scaled_test_inputs))
@@ -304,7 +327,7 @@ i=1
 @inbounds for i in 1:nrow(scaled_test_inputs)
     let wih = wih, who = who
     #correct_label = Int64.(scaled_test_inputs[i,1])
-    inputs = rotr90(convert(Array{Float64},scaled_test_inputs[i,1:length(scaled_test_inputs)])) # rotr90() for changing dim to [784,1] from [1,784] to meet matrix multiplication rules
+    inputs = reshape(Float64.(scaled_test_inputs[i,1:length(scaled_test_inputs)]),784,1) # rotr90() for changing dim to [784,1] from [1,784] to meet matrix multiplication rules
     # query the network
     outputs = query(wih, who, inputs) # Test the network over the test set data (wih and who already set during training - no weight updating happens this time round)
     # Find element position of what the network thinks the output is ie if output is a .96 in element position 6 then the network thinks the label was 5.
@@ -325,63 +348,10 @@ i=1
     end
 end
 
- CSV.write("C:/Users/Andrew.Bannerman/Desktop/Julia/andrew_bannerman_submission_four.csv", kaggle_out;delim=',')
+ CSV.write("C:/Users/Andrew.Bannerman/Desktop/Julia/andrew_bannerman_submission_twelve.csv", kaggle_out;delim=',')
 
 # Percentage Correct
 percentage = sum(scorecard) / size(scorecard,1)
 
 # Change log
 # 4.22.2019 - added a % print function to check train / test accuracy
-
-
-A = reshape(collect(1:81), (9, 9))
-A[30]  = 1
-A[39]  = 1
-A[31]  = 1
-A[40]  = 1
-A[41]  = 1
-A[42]  = 1
-A[32]  = 1
-A[33]  = 1
-A[34]  = 1
-A[43]  = 1
-
-print(A)
-
-
-function rotate_self(origin, point, angle)
-    """
-    Rotate a point counterclockwise by a given angle around a given origin.
-
-    The angle should be given in radians.
-    """
-    ox = origin[1]
-    oy = origin[2]
-    px = point[1]
-    py = point[2]
-
-    qx = ox + cos(angle) * (px - ox) - sin(angle) * (py - oy)
-    qy = oy + sin(angle) * (px - ox) + cos(angle) * (py - oy)
-    return qx, qy
-end
-
-using CoordinateTransformations, Rotations, StaticArrays
-
-http://juliagraphics.github.io/Luxor.jl/v1.2/transforms/
-
-# https://math.stackexchange.com/questions/72014/given-an-angle-in-radians-how-could-i-calculate-a-4x4-rotation-matrix-about-the
-
-using Rotations, StaticArrays
-
-# create the null rotation (identity matrix)
-id = one(RotMatrix{3, Float64})
-
-# create a random rotation matrix (uniformly distributed over all 3D rotations)
-r = rand(RotMatrix{3}) # uses Float64 by default
-
-# create a point
-p = SVector(1.0, 2.0, 3.0) # from StaticArrays.jl, but could use any AbstractVector...
-
-RotXYZ(A)
-
-RotMatrix(A)
