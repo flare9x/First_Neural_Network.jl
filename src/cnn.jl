@@ -25,7 +25,7 @@ train_set = CSV.read("C:/Users/Andrew.Bannerman/Desktop/Julia/My_First_Neural_Ne
 test_set = CSV.read("C:/Users/Andrew.Bannerman/Desktop/Julia/My_First_Neural_Network/Data/mnist_test.csv",header=false,types=fill(Float64,785))
 
 # Plot Example image
-example = Float64.(test_set[2,2:size(test_set,2)])
+example = Float64.(train_set[2,2:size(train_set,2)])
 example = rotl90(reshape(example,28,28))
 heatmap(example)
 
@@ -57,53 +57,88 @@ scaled_train_inputs = DataFrame(hcat(train_label,m_train))
 scaled_test_inputs = DataFrame(hcat(test_label,m_test))
 
 # Plot the new scale example
-example = Float64.(scaled_train_inputs[1,2:size(scaled_train_inputs,2)])
-example = rotl90(reshape(example,28,28))
+example = reshape(Float64.(scaled_train_inputs[1,2:size(scaled_train_inputs,2)]),784,1)
+example = reshape(example,28,28)
 heatmap(example)
 
+function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float64,2}, targets::Array{Float64,2}; lr::Float64=0.1, drop_out::Bool=true, drop_out_p::Float64=.8) #wih, who, lr, inputs, targets)
+
+  A = example
+
+# Set weights and filter
+# Initialize filter using a normal distribution with mean 0
+# standard deviation inversely proportional the square root of the number of units
+# Resource: https://stats.stackexchange.com/questions/200513/how-to-initialize-the-elements-of-the-filter-matrix
+scale = 1.0
+stdev = scale/sqrt(size(A,2)*(size(A,1)))
+filt = reshape(rand(Normal(0, stdev), 9),3,3)
+
 # Build the convolution layer
-function im2col(A, m,n) # mxn: block_size
-    # Note need to add a check so that the full conv box with stride fits into the image
-    # Conv = sum(filt .* conv) + bias
-    # https://github.com/JuliaArrays/PaddedViews.jl/issues/9
-    # Speed test
-    # Padding
-           M,N = size(A)
-           mc = M-m+1          # no. vertical blocks
-           nc = N-n+1          # no. horizontal blocks
-           padding = p+1
-          A = Int64.(PaddedView(0, A,(M+(p*2),N+(p*2)), (padding,padding))) # 1 layer of padding
-          #B = Array{eltype(A)}(undef, m*n, mc*nc)
-          B = zeros(Int8, m*n, 0)
-        # Create custom index to allow for stride
-              stride_col_index = collect(1:s:nc)
-              stride_row_index = collect(1:s:mc)
-           #B = Array{eltype(A)}(undef)
-         @inbounds for j = 1:length(stride_col_index) # Loop over columns horizontal
-             @inbounds for i = 1:length(stride_row_index) # loop over rows vertical
-               block = A[stride_row_index[i]:stride_row_index[i]+m-1, stride_col_index[j]:stride_col_index[j]+n-1]
-               shapes = rotr90(reshape(block,1,m*n))
-               B = hcat(B, shapes) # Append to output matrix
-              # @inbounds for k=1:m*n
-                #  B[k,(j-1)*mc+i] = block[k] # Populate the output
-                #if k == m*n
-                #    i = i+1
-                #    j = j+1
-                #end
-                print("j",j,"\ni",i,"\n")
-               end
-             end
+"""
+    conv(A::Array{Float64,2}; m::Int64=3,n::Int64=3, s::Int64=1, p::Int64=1)
+mxn = image convolution block size
+s = stride
+p = padding
+"""
+m=3
+n=3
+s=1
+p=0
+function conv(A::Array{Float64,2}; m::Int64=3,n::Int64=3, s::Int64=1, p::Int64=0) # mxn: block_size
+# Note need to add a check so that the full conv box with stride fits into the image
+# Conv = sum(filt .* conv) + bias
+# https://github.com/JuliaArrays/PaddedViews.jl/issues/9
+# Speed test
+# Padding
+  M,N = size(A)
+  mc = M+(p*2)-m+1          # no. vertical blocks
+  nc = N+(p*2)-n+1          # no. horizontal blocks
+  padding = p+1
+  A_pad = Float64.(PaddedView(0.0, A,(M+(p*2),N+(p*2)), (padding,padding))) # 1 layer of padding
+  #B = Array{eltype(A)}(undef, m*n, mc*nc)
+  B = zeros(Int8, m*n, 0)
+  # Create custom index to allow for stride
+  stride_col_index = collect(1:s:nc)
+  stride_row_index = collect(1:s:mc)
+  #B = Array{eltype(A)}(undef)
+  # split the image into small convolution blocks
+  # This function is similar to im2col
+  i = 1
+  j = 1
+  @inbounds for j = 1:size(stride_col_index,1) # Loop over columns horizontal
+    @inbounds for i = 1:size(stride_row_index,1) # loop over rows vertical
+        block = A_pad[stride_row_index[i]:stride_row_index[i]+m-1, stride_col_index[j]:stride_col_index[j]+n-1]
+        shapes = rotr90(reshape(block,1,m*n))
+       B = hcat(B, shapes) # Append to output matrix
+      end
+  end
+    # multiply the filter by the convolution block
+    # Calculate spatial size of the volume
+    # w = Input volume size
+    # f = size of the Conv Layer neurons
+    # s = Stride
+    # p = Amount of Zero padding
+    # Neuron fit = (W−F+2P)/S+1
+#
+    w = size(A,2)
+    f = size(filt,2)
+    conv_out_dim = Int64.((w-f+2*p) / s+1) # This is output dimension
+    eltype(conv_out_dim)
+    conv_out = zeros(conv_out_dim,conv_out_dim) # initialize output
+    for j in 1:size(B,2) # loop over column dim (horz.)
+      conv_out[j] = sum(filt .* reshape(B[:,j],m,n)) #+ bias # element wise multiplication
+    end
+         return conv_out
+  end
 
-             # Calculate spatial size of the volume
-             # W = Input volume size
-             # F = size of the Conv Layer neurons
-             # S = Stride
-             # P = Amount of Zero padding
-             # Neuron fit = (W−F+2P)/S+1
-                #conv_out = (W-F+2*P)/S+1 # This is output dimension conv * filt = 4*4
-         #  end
-           return B
-       end
 
-       @time A = reshape(1:81,9,:)
-       @time B = DataFrame(im2col(A, 3,3))
+
+       @time A = reshape(collect(1.0:1.0:25.0),5,:)
+       @time B = DataFrame(conv(A,s=1,p=0))
+
+       plots = conv(A,s=1,p=0)
+       heatmap(plots)
+
+       testing = DataFrame(conv_out)
+
+       CSV.write("C:/Users/Andrew.Bannerman/Desktop/Julia/test_outB.csv", B;delim=',')

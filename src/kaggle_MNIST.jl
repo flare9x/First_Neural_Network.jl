@@ -19,6 +19,12 @@
 # drop out = https://wiseodd.github.io/techblog/2016/06/25/dropout/
 # Neural network: https://github.com/wiseodd/hipsternet/blob/master/hipsternet/neuralnet.py
 
+
+# To do
+# root mena prop: https://engmrk.com/rmsprop/?utm_campaign=News&utm_medium=Community&utm_source=DataCamp.com
+# softmax
+# numpy from scratch: https://www.kaggle.com/scaomath/simple-mnist-numpy-from-scratch
+
 # To Do
 # 4.22.19 - drop out
 # 4.22.19 - bias
@@ -33,7 +39,6 @@ using Random
 using Images, CoordinateTransformations, TestImages, OffsetArrays, CoordinateTransformations
 using PaddedViews
 
-
 # Train and test set data preparation
 # Load MNIST Data set from .csv format
 train_set = CSV.read("C:/Users/Andrew.Bannerman/Desktop/Julia/First_Neural_Network.jl/kaggle/MNIST/train.csv",header=true,types=fill(Float64,785)) # "C:/Users/Andrew.Bannerman/Desktop/Julia/My_First_Neural_Network/Data/mnist_train.csv"
@@ -41,6 +46,7 @@ test_set = CSV.read("C:/Users/Andrew.Bannerman/Desktop/Julia/First_Neural_Networ
 
 # Plot Example image
 example = Float64.(train_set[4,2:size(train_set,2)])
+example = reshape(example,28,28)
 example = rotl90(reshape(example,28,28))
 heatmap(example)
 
@@ -53,39 +59,40 @@ train_set = train_set[:,2:size(train_set,2)]
 test_set = test_set[:,1:size(test_set,2)]
 
 # Pre process - Scale the inputs to a range of 0.01 to 1.00
-m_train = Array{Float64}(zeros(nrow(train_set),size(train_set,2))) # empty matrix
-@inbounds for i in 1:nrow(train_set)
+m_train = Array{Float64}(zeros(size(train_set,1),size(train_set,2))) # empty matrix
+@inbounds for i in 1:size(train_set,1)
     @inbounds for j in 1:size(train_set,2)
     m_train[i,j] = (train_set[i,j] / 255.0 * 0.99) + 0.01
     end
 end
 
-m_test = Array{Float64}(zeros(nrow(test_set),size(test_set,2))) # empty matrix
-@inbounds for i in 1:nrow(test_set)
+m_test = Array{Float64}(zeros(size(test_set,1),size(test_set,2))) # empty matrix
+@inbounds for i in 1:size(test_set,1)
     @inbounds for j in 1:size(test_set,2)
     m_test[i,j] = (test_set[i,j] / 255.0 * 0.99) + 0.01
     end
 end
 
 # Convert matrix to DataFrame and append the labels back to the train and test set
-scaled_orig_train_inputs = DataFrame(hcat(train_label,m_train))
+scaled_orig_train_inputs = hcat(train_label,m_train)
 scaled_test_inputs = DataFrame(hcat(m_test))
 
 # Plot the new scale example
-example = Float64.(scaled_test_inputs[7,1:length(scaled_test_inputs)])
+example = Float64.(scaled_test_inputs[7,1:size(scaled_test_inputs,2)])
 example = rotl90(reshape(example,28,28))
 heatmap(example)
 
 # Data Augmentation
-training_set_aug_minus = zeros(nrow(scaled_orig_train_inputs),ncol(scaled_orig_train_inputs))
-training_set_aug_plus = zeros(nrow(scaled_orig_train_inputs),ncol(scaled_orig_train_inputs))
+# Rotate images
+training_set_aug_minus = zeros(size(scaled_orig_train_inputs,1),size(scaled_orig_train_inputs,2))
+training_set_aug_plus = zeros(size(scaled_orig_train_inputs,1),size(scaled_orig_train_inputs,2))
 degree_rot_minus = -.2
 degree_rot_plus = .2
 i=1
-for i in 1:nrow(scaled_orig_train_inputs)
+for i in 1:size(scaled_orig_train_inputs,1)
         label = scaled_orig_train_inputs[i,1]
         example = Float64.(scaled_orig_train_inputs[i,2:size(scaled_orig_train_inputs,2)])
-        example = rotl90(reshape(example,28,28))
+        example = reshape(example,28,28)
         #rot_minus = LinearMap(RotMatrix(degree_rot_minus))
         #rot_plus = LinearMap(RotMatrix(degree_rot_plus))
         #imgw_minus = warp(example_minus, rot_minus, axes(example_plus)) #  axes(example_minus) = crops
@@ -96,30 +103,48 @@ for i in 1:nrow(scaled_orig_train_inputs)
         imgw_plus = reshape(imgw_plus,1,784)
             for k in 1:size(imgw_minus,2)
                 if isnan(imgw_minus[k]) # Convert NaN to 0.0
-                    imgw_minus[k] = 0.0
+                    imgw_minus[k] = 0.01
                 end
                 if isnan(imgw_plus[k]) # Convert NaN to 0.0
-                    imgw_plus[k] = 0.0
+                    imgw_plus[k] = 0.01
                 end
             end
-            imgw_plus .= (imgw_plus ./ 255.0 .* 0.99) .+ 0.01 # Scale the outputs
-            imgw_minus .= (imgw_minus ./ 255.0 .* 0.99) .+ 0.01 # Scale the outputs
+            #imgw_plus .= (imgw_plus ./ 255.0 .* 0.99) .+ 0.01 # Scale the outputs
+            #imgw_minus .= (imgw_minus ./ 255.0 .* 0.99) .+ 0.01 # Scale the outputs
             training_set_aug_minus[i,1] = label
             training_set_aug_minus[i,2:size(scaled_orig_train_inputs,2)] = imgw_minus
             training_set_aug_plus[i,1] = label
             training_set_aug_plus[i,2:size(scaled_orig_train_inputs,2)] = imgw_plus
         print("This is iteration i",i,"\n")
-    end
+end
+
+    maximum(imgw_plus)
+
 
 # Combine augmented data with the original
 # note may want to add shuffling?
 scaled_train_inputs = DataFrame(vcat(scaled_orig_train_inputs,training_set_aug_minus,training_set_aug_plus))
+#scaled_train_inputs = DataFrame(training_set_aug_plus)
+
+# Shuffle the augmented + original data
+scaled_train_inputs = scaled_train_inputs[shuffle(1:end), :]
 
 # Build the back propogation neural network
 
 # Create sigmoid activation function
 function sigmoid(x)
     return 1 / (1.0 + exp(-x))
+end
+
+function ReLU(x)
+    return x*(x>0)
+end
+
+x = 10000
+ReLU(x)
+
+function softmax(x)
+    return exp(x) / sum(exp(x))
 end
 
 
@@ -159,7 +184,6 @@ function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float6
 
     # Apply sigmoid function to each element the final layer output
     # final_inputs dim = [10,1]
-    final_outputs = sigmoid.(final_inputs)
     if drop_out == false
     final_outputs = sigmoid.(final_inputs)
     elseif drop_out == true
@@ -241,12 +265,12 @@ function query(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float6
 end
 
 # Number of input, hidden and output nodes
-input_nodes = size(train_set,2)-1 # equal to the size of the 28 * 28 image (784 elements)
-hidden_nodes = 200
+input_nodes = size(training_set_aug_plus,2)-1 # equal to the size of the 28 * 28 image (784 elements)
+hidden_nodes = 256 # 200
 output_nodes = 10 # Equal to the number of labels in this case numbers 0 to 9 (10 elements total)
 
 # learning rate
-learning_rate = 0.01
+learning_rate = 0.001 # small learning rate for ReLU
 
 # Create instance of neural network
 inodes = input_nodes
@@ -261,21 +285,21 @@ who = randn(onodes,hnodes) * hnodes^(-0.5)
 # Epochs is the number of times the training data set is used for training
 epochs = 10
 # Initialize training progress
-learning_curve = fill(0,nrow(scaled_train_inputs))
-training_accuracy = fill(0.0,nrow(scaled_train_inputs))
+learning_curve = fill(0,size(scaled_train_inputs,1))
+training_accuracy = fill(0.0,size(scaled_train_inputs,1))
 # Check that the neural network is converging
 @inbounds for i in 1:epochs
    # go through all records in the training data set
-   @inbounds for j in 1:nrow(scaled_train_inputs)
+   @inbounds for j in 1:size(scaled_train_inputs,1)
        # Subset by row [j,1] = label [j,2:length(scaled_train_inputs)] is the scaled image data
        label = Int64.(scaled_train_inputs[j,1])
-       inputs = reshape(Float64.(scaled_train_inputs[j,2:length(scaled_train_inputs)]),784,1) # rotr90() for changing dim to [784,1] from [1,784] to meet matrix multiplication rules
+       inputs = reshape(Float64.(scaled_train_inputs[j,2:size(scaled_train_inputs,2)]),784,1) # rotr90() for changing dim to [784,1] from [1,784] to meet matrix multiplication rules
        # create the target output values (all 0.01, except the desired label which is 0.99)
        targets = zeros(10,1)
        targets .= 0.01 .+ targets
        # Set the target .99 to the correct index position within the target array
        targets[label+1] = 0.99 # We +1 because the number convention starts at 0 to 9. Thus array position 6 is actually target number 5.
-       global wih, who, final_outputs = train(wih, who, inputs, targets; lr=learning_rate,drop_out=true,drop_out_p=.5)
+       global wih, who, final_outputs = train(wih, who, inputs, targets; lr=learning_rate,drop_out=true,drop_out_p=.8)
        # Check what the network thought the number was
        network_train_output = argmax(final_outputs)[1]-1 # adjust index position to account from 0 start
        if (label == network_train_output)
@@ -286,7 +310,7 @@ training_accuracy = fill(0.0,nrow(scaled_train_inputs))
            learning_curve[j] = 0
        end
        if (j == 1)
-           global learning_curve = fill(0,nrow(scaled_train_inputs))
+           global learning_curve = fill(0,size(scaled_train_inputs,1))
        end
        print("This is epoch ",i,"\nThis is iteration ",j,"\nCheck hidden layer output weight links are updating ", who[1],"\n")
        print("Training Accuracy ",(sum(learning_curve) / j),"\n")
@@ -298,12 +322,18 @@ end
 plot(training_accuracy,title="Training Accuracy")
 
 # Call the network on an indivdual entry
-example_call = Float64.(scaled_test_inputs[55,1:length(scaled_test_inputs)])
+example_call = Float64.(scaled_train_inputs[500,2:size(scaled_train_inputs,2)])
 example_call_image = rotl90(reshape(example_call,28,28))
 # Plot Number
 heatmap(example_call_image)
+#------------------------------
+using Plots; pgfplots()
+test = randn(3,3)
+heatmap(test, c = :greys)
+plot(test)
+#-------------------------------------
 # Grab the known correct label
-correct_label = scaled_test_inputs[500,1]
+correct_label = scaled_train_inputs[500,1]
 # Apply the trained network to the input example
 outputs = query(wih, who, example_call)
 # Check what the label thought the number was
@@ -317,17 +347,17 @@ end
 
 # Test the neural network
 # Initialize the scorecard output the same size as the number of test set labels
-scorecard = fill(0,nrow(scaled_test_inputs))
-test_accuracy = fill(0.0,nrow(scaled_test_inputs))
-kaggle_out = fill(0.0,nrow(scaled_test_inputs))
-kaggle_out = DataFrame(ImageId = collect(1:nrow(scaled_test_inputs)), Label = kaggle_out)
+scorecard = fill(0,size(scaled_test_inputs,1))
+test_accuracy = fill(0.0,size(scaled_test_inputs,1))
+kaggle_out = fill(0.0,size(scaled_test_inputs,1))
+kaggle_out = DataFrame(ImageId = collect(1:size(scaled_test_inputs,1)), Label = kaggle_out)
 
 # Input the test set data over the trained neural network to see how well it does
 i=1
-@inbounds for i in 1:nrow(scaled_test_inputs)
+@inbounds for i in 1:size(scaled_test_inputs,1)
     let wih = wih, who = who
     #correct_label = Int64.(scaled_test_inputs[i,1])
-    inputs = reshape(Float64.(scaled_test_inputs[i,1:length(scaled_test_inputs)]),784,1) # rotr90() for changing dim to [784,1] from [1,784] to meet matrix multiplication rules
+    inputs = reshape(Float64.(scaled_test_inputs[i,1:size(scaled_test_inputs,2)]),784,1) # rotr90() for changing dim to [784,1] from [1,784] to meet matrix multiplication rules
     # query the network
     outputs = query(wih, who, inputs) # Test the network over the test set data (wih and who already set during training - no weight updating happens this time round)
     # Find element position of what the network thinks the output is ie if output is a .96 in element position 6 then the network thinks the label was 5.
@@ -348,7 +378,7 @@ i=1
     end
 end
 
- CSV.write("C:/Users/Andrew.Bannerman/Desktop/Julia/andrew_bannerman_submission_twelve.csv", kaggle_out;delim=',')
+ CSV.write("C:/Users/Andrew.Bannerman/Desktop/Julia/andrew_bannerman_submission_seventeen.csv", kaggle_out;delim=',')
 
 # Percentage Correct
 percentage = sum(scorecard) / size(scorecard,1)

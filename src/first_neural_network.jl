@@ -122,7 +122,6 @@ function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float6
 
     # Apply sigmoid function to each element the final layer output
     # final_inputs dim = [10,1]
-    final_outputs = sigmoid.(final_inputs)
     if drop_out == false
     final_outputs = sigmoid.(final_inputs)
     elseif drop_out == true
@@ -264,7 +263,7 @@ print(learning_curve)
 plot(cumsum(learning_curve),title="Learning Curve")
 
 # Call the network on an indivdual entry
-example_call = Float64.(scaled_test_inputs[500,2:length(scaled_test_inputs)])
+example_call = Float64.(scaled_test_inputs[500,2:size(scaled_test_inputs,2)])
 example_call_image = rotl90(reshape(example_call,28,28))
 # Plot Number
 heatmap(example_call_image)
@@ -292,7 +291,7 @@ i=1
 @inbounds for i in 1:nrow(scaled_test_inputs)
     let wih = wih, who = who
     correct_label = Int64.(scaled_test_inputs[i,1])
-    inputs = reshape(Float64.(scaled_test_inputs[i,2:length(scaled_test_inputs)]),784,1) # rotr90() for changing dim to [784,1] from [1,784] to meet matrix multiplication rules
+    inputs = reshape(Float64.(scaled_test_inputs[i,2:size(scaled_test_inputs,1)]),784,1) # rotr90() for changing dim to [784,1] from [1,784] to meet matrix multiplication rules
     # query the network
     outputs = query(wih, who, inputs) # Test the network over the test set data (wih and who already set during training - no weight updating happens this time round)
     # Find element position of what the network thinks the output is ie if output is a .96 in element position 6 then the network thinks the label was 5.
