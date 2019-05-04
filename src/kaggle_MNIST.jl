@@ -24,6 +24,8 @@
 # root mena prop: https://engmrk.com/rmsprop/?utm_campaign=News&utm_medium=Community&utm_source=DataCamp.com
 # softmax
 # numpy from scratch: https://www.kaggle.com/scaomath/simple-mnist-numpy-from-scratch
+# Activation function == https://github.com/Kulbear/deep-learning-nano-foundation/wiki/ReLU-and-Softmax-Activation-Functions
+# MATH AI = https://hackernoon.com/learning-ai-if-you-suck-at-math-p6-math-notation-made-easy-1277d76a1fe5
 
 # To Do
 # 4.22.19 - drop out
@@ -38,6 +40,8 @@ using Plots
 using Random
 using Images, CoordinateTransformations, TestImages, OffsetArrays, CoordinateTransformations
 using PaddedViews
+
+lineplot(sin, 1:.5:20, labels=false)
 
 # Train and test set data preparation
 # Load MNIST Data set from .csv format
@@ -86,8 +90,8 @@ heatmap(example)
 # Rotate images
 training_set_aug_minus = zeros(size(scaled_orig_train_inputs,1),size(scaled_orig_train_inputs,2))
 training_set_aug_plus = zeros(size(scaled_orig_train_inputs,1),size(scaled_orig_train_inputs,2))
-degree_rot_minus = -.2
-degree_rot_plus = .2
+degree_rot_minus = -.3
+degree_rot_plus = .3
 i=1
 for i in 1:size(scaled_orig_train_inputs,1)
         label = scaled_orig_train_inputs[i,1]
@@ -137,15 +141,23 @@ function sigmoid(x)
 end
 
 function ReLU(x)
-    return x*(x>0)
+    #return x*(x>0)
+    return maximum(0.0,x)
 end
 
-x = 10000
+x = 500
 ReLU(x)
 
 function softmax(x)
     return exp(x) / sum(exp(x))
 end
+
+
+class Softmax(Activation):
+    @staticmethod
+    def evaluate(z):
+        z = np.exp(z)
+        return z / np.sum(z, axis=0)
 
 
 # Create the training function
@@ -270,7 +282,7 @@ hidden_nodes = 256 # 200
 output_nodes = 10 # Equal to the number of labels in this case numbers 0 to 9 (10 elements total)
 
 # learning rate
-learning_rate = 0.001 # small learning rate for ReLU
+learning_rate = 0.01 # small learning rate for ReLU
 
 # Create instance of neural network
 inodes = input_nodes
@@ -378,7 +390,7 @@ i=1
     end
 end
 
- CSV.write("C:/Users/Andrew.Bannerman/Desktop/Julia/andrew_bannerman_submission_seventeen.csv", kaggle_out;delim=',')
+ CSV.write("C:/Users/Andrew.Bannerman/Desktop/Julia/andrew_bannerman_submission_twentythree.csv", kaggle_out;delim=',')
 
 # Percentage Correct
 percentage = sum(scorecard) / size(scorecard,1)
