@@ -63,7 +63,8 @@ scaled_test_inputs = DataFrame(hcat(test_label,m_test))
 
 # Plot the new scale example
 example = reshape(Float64.(scaled_train_inputs[5,2:size(scaled_train_inputs,2)]),784,1)
-example = reshape(example,28,28)
+example = rotl90(reshape(example,28,28))
+print(example)
 heatmap(example,c = :greys)
 
 function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float64,2}, targets::Array{Float64,2}; lr::Float64=0.1, drop_out::Bool=true, drop_out_p::Float64=.8) #wih, who, lr, inputs, targets)
@@ -121,7 +122,8 @@ elseif padding == "custom"
   M,N = size(A_pad)
   mc = M-m+1          # no. vertical blocks (rows)
   nc = N-n+1          # no. horizontal blocks (cols)
-  B = zeros(Int64, m*n, 0)
+  #B = zeros(m*n, mc*nc)
+  B = zeros(m*n, 0)
   # Create custom index to allow for stride
   stride_col_index = collect(1:s:nc)
   stride_row_index = collect(1:s:mc)
@@ -132,9 +134,11 @@ elseif padding == "custom"
   j = 1
   @inbounds for j = 1:size(stride_col_index,1) # Loop over columns horizontal
     @inbounds for i = 1:size(stride_row_index,1) # loop over rows vertical
-        block = A_pad[stride_row_index[i]:stride_row_index[i]+m-1, stride_col_index[j]:stride_col_index[j]+n-1]
-        shapes = rotr90(reshape(block,1,m*n))
-        B = hcat(B, shapes) # Append to output matrix
+      @views block = A_pad[stride_row_index[i]:stride_row_index[i]+m-1, stride_col_index[j]:stride_col_index[j]+n-1]
+      # Consider adding extra for loop to populate output memory wise...
+        shapes = reshape(block,m*n,1)
+       B = hcat(B, shapes) # Append to output matrix
+    #B[:, j] = shapes
       end
   end
     # multiply the filter by the convolution block
@@ -144,19 +148,40 @@ elseif padding == "custom"
     # s = Stride
     # p = Amount of Zero padding
     # Neuron fit = (W−F+2P)/S+1
-#
     w = size(A_pad,2)
     f = size(filt,2)
     conv_out_dim = Int64.((w-f) / s+1) # This is conv output dimension (excluding padding)
-    eltype(conv_out_dim)
     conv_out = zeros(conv_out_dim,conv_out_dim) # initialize output
-    for j in 1:size(B,2) # loop over column dim (horz.)
+    @inbounds for j in 1:size(B,2) # loop over column dim (horz.)
       conv_out[j] = sum(filt .* reshape(B[:,j],m,n)) #+ bias # element wise multiplication
     end
          return conv_out
   end
 
-  A = conv2D = conv_layer(A,s=1,p=3,padding="same")
+      @time out = conv_layer(A,s=1,p=3,padding="same")
+
+  A = Float64.(reshape(1.0:81.0,9,9))
+  # initialize output
+  B = zeros(Int64, 2, 0)
+  j = 1
+  for j in 1:size(A,2) # loop cols
+    out = [sum(A[:,j]),j]
+    out = reshape(out,2,1)
+    # append out to the B
+    global B = hcat(B,out) # this grows...
+  end
+
+  function f2()
+      A = reshape(1:81,9,9)
+      B = zeros(Int64, 2, 9)
+      for j in 1:size(A,2) # loop cols
+          B[:, j] .= (sum(view(A, :, j)), j)
+      end
+      B
+  end
+
+
+    @time out = conv_layer(A,s=1,p=3,padding="same")
 
   heatmap(conv_out,c = :greys)
 m=2
@@ -179,7 +204,7 @@ pool_type = "max" | "avg"
     stride_row_index = collect(1:s:mc)
     @inbounds for j = 1:size(stride_col_index,1) # Loop over columns horizontal
       @inbounds for i = 1:size(stride_row_index,1) # loop over rows vertical
-          block = A[stride_row_index[i]:stride_row_index[i]+m-1, stride_col_index[j]:stride_col_index[j]+n-1]
+          @views block = A[stride_row_index[i]:stride_row_index[i]+m-1, stride_col_index[j]:stride_col_index[j]+n-1]
           shapes = rotr90(reshape(block,1,m*n))
             B = hcat(B, shapes) # Append to output matrix
         end
@@ -202,7 +227,7 @@ pool_type = "max" | "avg"
     return pooling_out
   end
 
-  pool_out = pooling_layer(A,m=2,n=2,s=2)
+  @time pool_out = pooling_layer(A,m=2,n=2,s=2)
     heatmap(testing, c = :greys)
 
     conv2 = conv_layer(pool_out,s=1,p=3,padding="same")

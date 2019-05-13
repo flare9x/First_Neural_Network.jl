@@ -17,6 +17,9 @@
 # How to get MNIST data as a CSV https://pjreddie.com/projects/mnist-in-csv/
 # Kaggle - https://www.kaggle.com/ngbolin/mnist-dataset-digit-recognizer
 
+
+# Back propogation tutorial: https://dev.to/shamdasani/build-a-flexible-neural-network-with-backpropagation-in-python
+
 # Needed packages
 using DataFrames
 using CSV
@@ -43,7 +46,8 @@ test_set = CSV.read("C:/Users/Andrew.Bannerman/Desktop/Julia/My_First_Neural_Net
 # Plot Example image
 example = Float64.(test_set[2,2:size(test_set,2)])
 example = rotl90(reshape(example,28,28))
-heatmap(example)
+heatmap(example,c = :greys)
+print(example)
 
 # Extract labels
 train_label = train_set[:,1]
@@ -69,189 +73,230 @@ m_test = Array{Float64}(zeros(nrow(test_set),size(test_set,2))) # empty matrix
 end
 
 # Convert matrix to DataFrame and append the labels back to the train and test set
-scaled_train_inputs = DataFrame(hcat(train_label,m_train))
+scaled_orig_train_inputs = DataFrame(hcat(train_label,m_train))
 scaled_test_inputs = DataFrame(hcat(test_label,m_test))
 
 # Plot the new scale example
-example = Float64.(scaled_train_inputs[1,2:size(scaled_train_inputs,2)])
+example = Float64.(scaled_orig_train_inputs[1,2:size(scaled_orig_train_inputs,2)])
 example = rotl90(reshape(example,28,28))
-heatmap(example)
+heatmap(example, c = :greys)
 
-# Build the back propogation neural network
+#---------
+# Data Augmentation
+#---------
 
-# Create sigmoid activation function
+# Rotate images
+training_set_aug_minus = zeros(size(scaled_orig_train_inputs,1),size(scaled_orig_train_inputs,2))
+training_set_aug_plus = zeros(size(scaled_orig_train_inputs,1),size(scaled_orig_train_inputs,2))
+degree_rot_minus = -.3
+degree_rot_plus = .3
+i=1
+for i in 1:size(scaled_orig_train_inputs,1)
+        label = scaled_orig_train_inputs[i,1]
+        example = Float64.(scaled_orig_train_inputs[i,2:size(scaled_orig_train_inputs,2)])
+        example = reshape(example,28,28)
+        #rot_minus = LinearMap(RotMatrix(degree_rot_minus))
+        #rot_plus = LinearMap(RotMatrix(degree_rot_plus))
+        #imgw_minus = warp(example_minus, rot_minus, axes(example_plus)) #  axes(example_minus) = crops
+        #imgw_plus = warp(example_plus, rot_plus, axes(example_plus)) # axes() = crops
+        imgw_minus = imrotate(example, degree_rot_minus, axes(example))
+        imgw_plus = imrotate(example, degree_rot_plus, axes(example))
+        imgw_minus = reshape(imgw_minus,1,784)
+        imgw_plus = reshape(imgw_plus,1,784)
+            for k in 1:size(imgw_minus,2)
+                if isnan(imgw_minus[k]) # Convert NaN to 0.0
+                    imgw_minus[k] = 0.01
+                end
+                if isnan(imgw_plus[k]) # Convert NaN to 0.0
+                    imgw_plus[k] = 0.01
+                end
+            end
+            #imgw_plus .= (imgw_plus ./ 255.0 .* 0.99) .+ 0.01 # Scale the outputs
+            #imgw_minus .= (imgw_minus ./ 255.0 .* 0.99) .+ 0.01 # Scale the outputs
+            training_set_aug_minus[i,1] = label
+            training_set_aug_minus[i,2:size(scaled_orig_train_inputs,2)] = imgw_minus
+            training_set_aug_plus[i,1] = label
+            training_set_aug_plus[i,2:size(scaled_orig_train_inputs,2)] = imgw_plus
+        print("This is iteration i",i,"\n")
+end
+
+    maximum(imgw_plus)
+
+
+# Combine augmented data with the original
+# note may want to add shuffling?
+scaled_train_inputs = DataFrame(vcat(scaled_orig_train_inputs,training_set_aug_minus,training_set_aug_plus))
+#scaled_train_inputs = DataFrame(training_set_aug_plus)
+
+# Shuffle the augmented + original data
+scaled_train_inputs = scaled_train_inputs[shuffle(1:end), :]
+
+#---------
+# Activation Functions
+#---------
+
 function sigmoid(x)
     return 1 / (1.0 + exp(-x))
 end
 
-
-
-# Create the training function
-# Step 1 - feed the data through the 3 layers whilst adjusting the inputs by link weights + squishing with sigmoid function at each output node.
-# Layer 1 = inputs (inputs * weights)
-# Layer 2 = hidden layer = squish with sigmoid the output of layer 1 - the output of hidden layer then is * by link weights (who) which then becomes the input to the output layer
-# Layer 3 = output = squish output of hidden layer by sigmoid to obtain final output
-# Step 2
-# Calculate the error - the network output (what the network thinks the answer is) - the target
-# Step 3 - Update the link weights in proporation to the error (ie if a link weight is higher than another link weight to same node - adjust the larger weight by the bigger fraciton)
-# Output Errors = targets - final_outputs
-# Hidden layer output errors = who' * output_errors
-# Using chain rule - update the link weights from the hidden layer to output (who) and again for the input to the hidden layer (wih)
-# This updating of weights is how the network learns!
-function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float64,2}, targets::Array{Float64,2}; lr::Float64=0.1, drop_out::Bool=true, drop_out_p::Float64=.8) #wih, who, lr, inputs, targets)
-    # Matrix multiplication Rules - https://www.mathsisfun.com/algebra/matrix-multiplying.html
-    # [m * n] * [n * p] = [m * p] # the last n must match the first n
-    # [row, column]
-    # wih dim = [200,784]
-    # input dim = [784, 1]
-    hidden_inputs = wih * inputs # hidd_input dim = [200, 1]
-
-    # Apply sigmoid function to each element the hidden layer output
-    # hidden_inputs dim = [200, 1]
-    if drop_out == false
-    hidden_outputs = sigmoid.(hidden_inputs)
-    elseif drop_out == true
-    hidden_outputs = sigmoid.(hidden_inputs)
-    hidden_outputs .* rand(Binomial(1,drop_out_p), hnodes) ./ drop_out_p # Apply drop out by hidden output * 0,1's / p (1/p - scaled so we dont need to apply at test time)(inverted dropout)
-    end
-
-    # Apply the weights to the hidden layer outputs which then are the final layers inputs
-    # who dims = [10,200]
-    # hidden_outputs dims = [200, 1]
-    final_inputs = who * hidden_outputs
-
-    # Apply sigmoid function to each element the final layer output
-    # final_inputs dim = [10,1]
-    if drop_out == false
-    final_outputs = sigmoid.(final_inputs)
-    elseif drop_out == true
-    final_outputs = sigmoid.(final_inputs)
-    final_outputs .* rand(Binomial(1,drop_out_p), onodes) ./ drop_out_p # Apply drop out by hidden output * 0,1's / p (1/p - scaled so we dont need to apply at test time)(inverted dropout)
-    end
-
-    # output layer error is the (target - actual)
-    # output_errors dim = [10,1]
-    output_errors = targets - final_outputs
-
-    # hidden_errors dim = [200,1]
-    # Find error between target and output
-    hidden_errors = who' * output_errors
-
-    # Update weights of the neural network - this is how the network learns by adjusting the link weights in propotation to the link weight and error.
-    # update the weights for the links between the hidden and output layers
-    who .= who .+ (lr .* (output_errors .* final_outputs .* (1.0 .- final_outputs)) * hidden_outputs')
-
-    # update the weights for the links between the input and hidden layers
-    wih .= wih .+ (lr .* (hidden_errors .* hidden_outputs .* (1.0 .- hidden_outputs)) * inputs')
-
-    return(wih, who, final_outputs)
+function sigmoid_derivative(x)
+    s = 1 / (1 + exp(-x))
+    return s * (1 - s)
 end
 
-#=
-# Example of link weight updating (prior to using calclus chain rule)
-# Refine weight on output node (1x node example with two w11 and w21 connected links)
-# Splits the error in proportion to the error ie if w11 is contributing more to error, adjust that by bigger weight.
-# Fraction of e1 to refine w11
-w11 = 6.0  # weight 1, 1 means node connection 1 to node 1
-w21 = 3.0 # weight 2, 1 means node connection 2 to 1
-refine_w11 = w11 / (w11+w21) # 2.3
-# Fraction of e1 to refine w21
-refine_w11 = w21 / (w21+w11) # 1/3
-# Recombine split errors for the links using the error backpropogation
-# ehidden,1 = sum of split errors on links w11 and w12
-# Link weights beween hidden and output layer example
-w11 = 2.0
-w12 = 1.0
-w21 = 3.0
-w22 = 4.0
-e1 = 0.8 # final output error
-e2 = 0.5 # final output error
-# Find the sum of the errors on e1 and e2
-error_out_e1 = e1 * (w11 / (w11 + w21)) + e2 * (w12 / (w12 + w22)) # Sum of split errors
-# Flip to find the other summed link error
-error_out_e2 = e2 * (w22 / (w22 + w12)) + e1 * (w21 / (w21 + w11)) # Sum of split errors
-# Back propogate error_out_e1 and error_out_e2 to the hidden layer input weights
-w11 = 3.0
-w12 = 1.0
-w21 = 2.0
-w22 = 7.0
-e1 = error_out_e1 # Hidden layer output sum of proportional errors
-e2 = error_out_e2 # Hidden layer output sum of proportional errors
-error_out_e1 = e1 * (w11 / (w11 + w21)) + e2 * (w12 / (w12 + w22)) # Sum of split errors
-error_out_e2 = e2 * (w22 / (w22 + w12)) + e1 * (w21 / (w21 + w11))
-# simply in matrix
-(w11 / (w11 + w21)) (w12 / (w12 + w22))     e1
-(w21 / (w21 + w11)) (w22 / (w22 + w12))     e2
-=#
-
-# Function for applying the network to unseen or test data not seen (trained) by the network before
-function query(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float64,2})
-    # calculate signals into hidden layer
-    hidden_inputs = wih * inputs
-    # calculate the signals emerging from hidden layer
-    hidden_outputs = sigmoid.(hidden_inputs)
-
-    # calculate signals into final output layer
-    final_inputs = who * hidden_outputs
-    # calculate the signals emerging from final output layer
-    final_outputs = sigmoid.(final_inputs)
-
-    return(final_outputs)
+function ReLU(x)
+    #return x*(x>0)
+    return maximum([0.0,x])
 end
 
+function ReLU_derivative(x)
+    if x <= 0
+    end
+    return 0
+end
+
+#---------
+# Layers
+# https://medium.freecodecamp.org/building-a-3-layer-neural-network-from-scratch-99239c4af5d3
+#---------
+
+function dropout(d_in::Array{Float64,2}; p::Float64=.8)
+    out = (d_in .* rand(Binomial(1,p), size(d_in)[1])) ./ p
+return out
+end
+
+activation = "sigmoid"
+drop_out = false
+function forward_prop(W1::Array{Float64,2}, b1::Array{Float64,2}, W2::Array{Float64,2}, b2::Array{Float64,2}, X::Array{Float64,2}, Y::Array{Float64,2}; drop_out::Bool=true, p::Float64=.5, activation::String="sigmoid")
+    Z1 = W1 * X + b1
+    if drop_out == false
+        if activation == "sigmoid"
+    A1 = sigmoid.(Z1)
+elseif activation == "relu"
+    A1 = ReLU.(Z1)
+    end
+    elseif drop_out == true
+        if activation == "sigmoid"
+    A1 = sigmoid.(Z1)
+    A1 = dropout(A1,p=.8)
+    elseif activation == "relu"
+    A1 = ReLU.(Z1)
+    A1 = dropout(A1,p=.8) # Apply drop out by hidden output * 0,1's / p (1/p - scaled so we dont need to apply at test time)(inverted dropout)
+        end
+    end
+    Z2 = (W2 * A1) + b2
+    if activation == "sigmoid"
+    A2 = sigmoid.(Z2)
+elseif activation == "relu"
+    A2 = ReLU.(Z2)
+    end
+    return Z1, A1, Z2, A2
+end
+
+#----
+# back prop math: http://deeplizard.com/learn/video/G5b4jRBKNxw
+# https://github.com/mbadry1/DeepLearning.ai-Summary/tree/master/1-%20Neural%20Networks%20and%20Deep%20Learning#gradient-descent-on-m-examples
+#----
+function backward_prop(W1::Array{Float64,2}, b1::Array{Float64,2}, W2::Array{Float64,2}, b2::Array{Float64,2}, X::Array{Float64,2}, Y::Array{Float64,2}, Z1::Array{Float64,2}, A1::Array{Float64,2}, Z2::Array{Float64,2}, A2::Array{Float64,2}; learning_rate::Float64=.01,activation::String="relu")
+    dZ2 = A2 - Y # output errors
+    dW2 = (dZ2 * A1')
+    db2 =  sum(dZ2, dims = 2)
+    if activation == "sigmoid"
+        dZ1 = (W2' * dZ2) .* sigmoid_derivative.(A1) #(1 .- A1.^2)
+    elseif activation == "relu"
+        dZ1 = (W2' * dZ2) .* ReLU_derivative.(A1) #(1 .- A1.^2)
+    end
+    dW1 = (dZ1 * X')
+    db1 =  sum(dZ1,dims = 2)
+   # Update params
+    W1 = W1 .- (learning_rate .* dW1)
+     b1 = b1 .- (learning_rate .* db1)
+     W2 = W2 .- (learning_rate * dW2)
+     b2 = b2 .- (learning_rate .* db2)
+    # print("check w1 is updating",W2[1])
+
+    return  dW1, db1, dW2, db2, W1, b1, W2, b2
+end
+
+#---------
+# Cost Function
+#---------
+
+function cost_function(A2::Array{Float64,2}, Y::Array{Float64,2}; activation::String="sigmoid")
+    if activation == "sigmoid"
+    m = size(Y)[1]
+    #cost = (- 1 / m) * np.sum(Y * np.log(A) + (1 - Y) * (np.log(1 - A)))  # compute cost
+    cost = (-1/m) * sum((Y' * log.(A2)) .+ ((1 .- Y')* log.(1 .- A2)))
+        #cost = (-1/m) * sum((Y * log.(A2')) .+ ((1 .- Y)* log.(1 .- A2')))
+elseif activation == "relu"
+    return Inf
+end
+return cost
+end
+
+#---------
+# Initialize network
+#---------
+
+# Define neural network
 # Number of input, hidden and output nodes
 input_nodes = size(train_set,2) # equal to the size of the 28 * 28 image (784 elements)
-hidden_nodes = 200
+hidden_nodes = 256
 output_nodes = 10 # Equal to the number of labels in this case numbers 0 to 9 (10 elements total)
-
-# learning rate
-learning_rate = 0.01
 
 # Create instance of neural network
 inodes = input_nodes
 hnodes = hidden_nodes
 onodes = output_nodes
-# As randn generates numbers from a standard normal distribution we have to multiply by the standard deviation
-wih = randn(hnodes,inodes) * inodes^(-0.5)
-who = randn(onodes,hnodes) * hnodes^(-0.5)
+# Weight initialization
+# w = np.random.randn(n) * sqrt(2.0/n) for relu
+# w = np.random.randn(n) / sqrt(n) # other
+#W1 = randn(hnodes,inodes) * inodes^(-0.5)
+#W2 = randn(onodes,hnodes) * hnodes^(-0.5)
 
-# Train the neural network
-# 4.22.2019 - Add functinality to save the numbers which the network did not get correct
-# Epochs is the number of times the training data set is used for training
-epochs = 20
+W1 = randn(hnodes,inodes) * sqrt(2.0/inodes)
+W2 = randn(onodes,hnodes) * sqrt(2.0/hnodes)
+# Initializing the biases as 0's
+b1 = zeros(hnodes,1)
+b2 = zeros(onodes,1)
+
+epochs = 5
+# Check that the neural network is converging
 # Initialize training progress
 learning_curve = fill(0,nrow(scaled_train_inputs))
 training_accuracy = fill(0.0,nrow(scaled_train_inputs))
-# Check that the neural network is converging
-j =1
 i = 1
+j = 1
 @inbounds for i in 1:epochs
     # go through all records in the training data set
     @inbounds for j in 1:nrow(scaled_train_inputs)
-        # Subset by row [j,1] = label [j,2:length(scaled_train_inputs)] is the scaled image data
+        # Forward propogation
         label = Int64.(scaled_train_inputs[j,1])
-        inputs = reshape(Float64.(scaled_train_inputs[j,2:size(scaled_train_inputs,2)]),784,1)
+        X = reshape(Float64.(scaled_train_inputs[j,2:size(scaled_train_inputs,2)]),784,1)
         # create the target output values (all 0.01, except the desired label which is 0.99)
-        targets = zeros(10,1)
-        targets .= 0.01 .+ targets
+        Y = zeros(10,1)
+        Y .= 0.01 .+ Y
         # Set the target .99 to the correct index position within the target array
-        targets[label+1] = 0.99 # We +1 because the number convention starts at 0 to 9. Thus array position 6 is actually target number 5.
-        global wih, who, final_outputs = train(wih, who, inputs, targets; lr=learning_rate,drop_out=true,drop_out_p=.5)
-        # Check what the network thought the number was
-        network_train_output = argmax(final_outputs)[1]-1 # adjust index position to account from 0 start
-        if (label == network_train_output)
-            # network's answer matches correct answer, add 1 to learning curve
-            learning_curve[j] = 1
-        else
-            # network's answer doesn't match correct answer, add 0 to learning curve
-            learning_curve[j] = 0
-        end
-        if (j == 1)
-            global learning_curve = fill(0,nrow(scaled_train_inputs))
-        end
-        print("This is epoch ",i,"\nThis is iteration ",j,"\nCheck hidden layer output weight links are updating ", who[1],"\n")
-        print("Training Accuracy ",(sum(learning_curve) / j),"\n")
-        training_accuracy[i] = (sum(learning_curve) / j)
+        Y[label+1] = 0.99 # We +1 because the number convention starts at 0 to 9. Thus array position 6 is actually target number 5.
+global Z1, A1, Z2, A2 = forward_prop(W1, b1, W2, b2, X, Y; drop_out=false, p=.5,activation="relu")
+cost_rate = cost_function(A2,Y;activation="relu")
+global dW1, db1, dW2, db2, W1, b1, W2, b2 = backward_prop(W1, b1, W2, b2, X, Y, Z1, A1, Z2, A2; learning_rate=.01,activation="relu")
+#print("check training weight being update", dW1[1],"\n")
+network_train_output = argmax(A2)[1]-1 # adjust index position to account from 0 start
+if (label == network_train_output)
+    # network's answer matches correct answer, add 1 to learning curve
+    learning_curve[j] = 1
+else
+    # network's answer doesn't match correct answer, add 0 to learning curve
+    learning_curve[j] = 0
+end
+if (j == 1)
+    global learning_curve = fill(0,nrow(scaled_train_inputs))
+end
+print("Cost after iteration ",j," ",cost_rate,"\n")
+print("Training Accuracy ",(sum(learning_curve) / j),"\n")
+print("This is epoch ",i,"\nThis is iteration ",j,"\n")
+
     end
 end
 
@@ -262,15 +307,41 @@ print(learning_curve)
 # Plot the learning curve
 plot(cumsum(learning_curve),title="Learning Curve")
 
+#---------
+# Test Function
+#---------
+
+# Function for applying the network to unseen or test data not seen (trained) by the network before
+function test_nn(W1::Array{Float64,2}, W2::Array{Float64,2},b1::Array{Float64,2}, b2::Array{Float64,2},X::Array{Float64,2})
+    Z1 = W1 * X + b1
+        if activation == "sigmoid"
+    A1 = sigmoid.(Z1)
+elseif activation == "relu"
+    A1 = ReLU.(Z1)
+    end
+    Z2 = (W2 * A1) + b2
+    if activation == "sigmoid"
+    A2 = sigmoid.(Z2)
+elseif activation == "relu"
+    A2 = ReLU.(Z2)
+    end
+    return A2
+end
+
+#---------
+# Test Network on Individual image
+#---------
+
 # Call the network on an indivdual entry
 example_call = Float64.(scaled_test_inputs[500,2:size(scaled_test_inputs,2)])
+example_call = reshape(example_call,784,1)
 example_call_image = rotl90(reshape(example_call,28,28))
 # Plot Number
-heatmap(example_call_image)
+heatmap(example_call_image,c = :greys)
 # Grab the known correct label
 correct_label = scaled_test_inputs[500,1]
 # Apply the trained network to the input example
-outputs = query(wih, who, example_call)
+outputs = test_nn(W1, W2, b1,b2,example_call)
 # Check what the label thought the number was
 network_label = argmax(outputs)[1]-1
 if network_label ==  correct_label
@@ -281,7 +352,10 @@ end
 
 print(example_call_image)
 
-# Test the neural network
+#---------
+# Test Neural Network on Test Data
+#---------
+
 # Initialize the scorecard output the same size as the number of test set labels
 scorecard = fill(0,nrow(scaled_test_inputs))
 test_accuracy = fill(0.0,nrow(scaled_test_inputs))
@@ -293,7 +367,7 @@ i=1
     correct_label = Int64.(scaled_test_inputs[i,1])
     inputs = reshape(Float64.(scaled_test_inputs[i,2:size(scaled_test_inputs,1)]),784,1) # rotr90() for changing dim to [784,1] from [1,784] to meet matrix multiplication rules
     # query the network
-    outputs = query(wih, who, inputs) # Test the network over the test set data (wih and who already set during training - no weight updating happens this time round)
+    outputs = test_nn(W1, W2, b1,b2,inputs) # Test the network over the test set data (wih and who already set during training - no weight updating happens this time round)
     # Find element position of what the network thinks the output is ie if output is a .96 in element position 6 then the network thinks the label was 5.
     # This is because we have hand written numbers 0 to 9, total 10 outputs. Starting from index position 1 = label 0 hence index position 6 then = label 5
     label = argmax(outputs)[1]-1 # adjust index position to account from 0 start
@@ -314,5 +388,7 @@ end
 percentage = sum(scorecard) / size(scorecard,1)
 
 # Change log
-# 4.22.2019 - added a % print function to check train / test accuracy
+# 5.12.2019 - Changed the back propogation derivatives to allow different activation functions
+# 5.12.2019 - Added bias
 # 4.23.2019 - Added first implemntation of drop out
+# 4.22.2019 - added a % print function to check train / test accuracy

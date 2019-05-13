@@ -27,6 +27,14 @@
 # Activation function == https://github.com/Kulbear/deep-learning-nano-foundation/wiki/ReLU-and-Softmax-Activation-Functions
 # MATH AI = https://hackernoon.com/learning-ai-if-you-suck-at-math-p6-math-notation-made-easy-1277d76a1fe5
 
+# Machine learning cheat sheet: https://ml-cheatsheet.readthedocs.io/en/latest/activation_functions.html
+# Drop out video: https://www.youtube.com/watch?v=UcKPdAM8cnI /
+# Deeplearning.ai
+# https://www.youtube.com/watch?v=D8PJAL-MZv8
+
+# Bias = https://medium.com/@erikhallstrm/backpropagation-from-the-beginning-77356edf427d
+# Full code for updating bias: https://medium.com/coinmonks/implement-back-propagation-in-neural-networks-ed09897593e7 #--- numpy
+
 # To Do
 # 4.22.19 - drop out
 # 4.22.19 - bias
@@ -139,14 +147,28 @@ scaled_train_inputs = scaled_train_inputs[shuffle(1:end), :]
 function sigmoid(x)
     return 1 / (1.0 + exp(-x))
 end
-
+#return maximum(0.0,x)
 function ReLU(x)
     #return x*(x>0)
-    return maximum(0.0,x)
+    return maximum([0.0,x])
 end
 
-x = 500
+x = -500
 ReLU(x)
+
+"""
+Leaky ReLU
+f(x)=1(x<0)(αx)+1(x>=0)(x) where α = some constant
+"""
+function ReLuL(x)
+    if (x > 0.0)
+        return x
+    elseif (x <= 0.0)
+        return x * 0.01
+    end
+end
+
+ReLuL(20)
 
 function softmax(x)
     return exp(x) / sum(exp(x))
@@ -172,13 +194,15 @@ class Softmax(Activation):
 # Hidden layer output errors = who' * output_errors
 # Using chain rule - update the link weights from the hidden layer to output (who) and again for the input to the hidden layer (wih)
 # This updating of weights is how the network learns!
+drop_out = false
+drop_out_p = .8
 function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float64,2}, targets::Array{Float64,2}; lr::Float64=0.1, drop_out::Bool=true, drop_out_p::Float64=.8) #wih, who, lr, inputs, targets)
     # Matrix multiplication Rules - https://www.mathsisfun.com/algebra/matrix-multiplying.html
     # [m * n] * [n * p] = [m * p] # the last n must match the first n
     # [row, column]
     # wih dim = [200,784]
     # input dim = [784, 1]
-    hidden_inputs = wih * inputs # hidd_input dim = [200, 1]
+    hidden_inputs = (wih * inputs + bih) # hidd_input dim = [200, 1]
 
     # Apply sigmoid function to each element the hidden layer output
     # hidden_inputs dim = [200, 1]
@@ -186,13 +210,13 @@ function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float6
     hidden_outputs = sigmoid.(hidden_inputs)
     elseif drop_out == true
     hidden_outputs = sigmoid.(hidden_inputs)
-    hidden_outputs .* rand(Binomial(1,drop_out_p), hnodes) ./ drop_out_p # Apply drop out by hidden output * 0,1's / p (1/p - scaled so we dont need to apply at test time)(inverted dropout)
+    hidden_outputs .= (hidden_outputs .* rand(Binomial(1,drop_out_p), hnodes)) ./ drop_out_p # Apply drop out by hidden output * 0,1's / p (1/p - scaled so we dont need to apply at test time)(inverted dropout)
     end
 
     # Apply the weights to the hidden layer outputs which then are the final layers inputs
     # who dims = [10,200]
     # hidden_outputs dims = [200, 1]
-    final_inputs = who * hidden_outputs
+    final_inputs = (who * hidden_outputs) + bho
 
     # Apply sigmoid function to each element the final layer output
     # final_inputs dim = [10,1]
@@ -200,26 +224,29 @@ function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float6
     final_outputs = sigmoid.(final_inputs)
     elseif drop_out == true
     final_outputs = sigmoid.(final_inputs)
-    final_outputs .* rand(Binomial(1,drop_out_p), onodes) ./ drop_out_p # Apply drop out by hidden output * 0,1's / p (1/p - scaled so we dont need to apply at test time)(inverted dropout)
-    end
+    final_outputs .= (final_outputs .* rand(Binomial(1,drop_out_p), onodes)) ./ drop_out_p # Apply drop out by hidden output * 0,1's / p (1/p - scaled so we dont need to apply at test time)(inverted dropout)
+end
 
     # output layer error is the (target - actual)
     # output_errors dim = [10,1]
     output_errors = targets - final_outputs
-
     # hidden_errors dim = [200,1]
-    # Find error between target and output
+    # hidden layer error is the output_errors, split by weights, recombined at hidden nodes
     hidden_errors = who' * output_errors
 
     # Update weights of the neural network - this is how the network learns by adjusting the link weights in propotation to the link weight and error.
     # update the weights for the links between the hidden and output layers
     who .= who .+ (lr .* (output_errors .* final_outputs .* (1.0 .- final_outputs)) * hidden_outputs')
+    bho .= bho .+ (lr .* (output_errors .* final_outputs .* (1.0 .- final_outputs)) * hidden_outputs')
 
     # update the weights for the links between the input and hidden layers
     wih .= wih .+ (lr .* (hidden_errors .* hidden_outputs .* (1.0 .- hidden_outputs)) * inputs')
+    bih .= bih .+ (lr .* (hidden_errors .* hidden_outputs .* (1.0 .- hidden_outputs)) * inputs')
 
     return(wih, who, final_outputs)
 end
+
+lr = .01
 #=
 # Example of link weight updating (prior to using calclus chain rule)
 # Refine weight on output node (1x node example with two w11 and w21 connected links)
@@ -291,11 +318,13 @@ onodes = output_nodes
 # As randn generates numbers from a standard normal distribution we have to multiply by the standard deviation
 wih = randn(hnodes,inodes) * inodes^(-0.5)
 who = randn(onodes,hnodes) * hnodes^(-0.5)
+bih = zero(wih)
+bho = zero(who)
 
 # Train the neural network
 # 4.22.2019 - Add functinality to save the numbers which the network did not get correct
 # Epochs is the number of times the training data set is used for training
-epochs = 10
+epochs = 15
 # Initialize training progress
 learning_curve = fill(0,size(scaled_train_inputs,1))
 training_accuracy = fill(0.0,size(scaled_train_inputs,1))
@@ -331,7 +360,8 @@ training_accuracy = fill(0.0,size(scaled_train_inputs,1))
 end
 
 # Plot the learning curve
-plot(training_accuracy,title="Training Accuracy")
+outie = training_accuracy[1:500]
+plot(outie,title="Training Accuracy")
 
 # Call the network on an indivdual entry
 example_call = Float64.(scaled_train_inputs[500,2:size(scaled_train_inputs,2)])
