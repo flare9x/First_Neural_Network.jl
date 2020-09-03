@@ -8,6 +8,7 @@
 # CNN - https://adeshpande3.github.io/A-Beginner%27s-Guide-To-Understanding-Convolutional-Neural-Networks/
 # CNN - https://github.com/wiseodd/hipsternet/blob/master/hipsternet/neuralnet.py
 # CNN layer julia = https://github.com/FluxML/Flux.jl/blob/master/src/layers/conv.jl
+# CNN back prop: https://zhenye-na.github.io/2018/09/15/build-cnn-with-mnist-from-scratch.html #------------------- https://github.com/Zhenye-Na/deep-learning-uiuc/tree/master/assignments/mp2
 
 #----------------------
 # max pooling expalined: https://www.youtube.com/watch?v=ZjM_XQa5s6s
@@ -242,6 +243,44 @@ input ---> conv_layer ---> pooling ---> conv_layer ---> pooling ---> fully conne
 # Create Fully-Connected Layer
 pooled_shape = size(pool_out2)[1] * size(pool_out2)[2]
 flatten = reshape(pool_out2,pooled_shape,1) # flatten pool layer
+
+# softmax
+function softmax(x)
+    return exp(x) / sum(exp(x))
+end
+
+# Loss function
+"""
+calculate the categorical cross-entropy loss of the predictions
+x = output of softmax (probabilities)
+y = target label
+"""
+function categoricalCrossEntropy(x, y)
+    return -sum(y * log.(x)) # Multiply the desired output label by the log of the prediction, then sum all values in the vector
+  end
+
+  # Initialize the network
+  # Define neural network
+  # Number of input, hidden and output nodes
+  input_nodes = size(train_set,2) # equal to the size of the 28 * 28 image (784 elements)
+  hidden_nodes = 256
+  output_nodes = 10 # Equal to the number of labels in this case numbers 0 to 9 (10 elements total)
+
+  # Create instance of neural network
+  inodes = input_nodes
+  hnodes = hidden_nodes
+  onodes = output_nodes
+  # Weight initialization
+  # w = np.random.randn(n) * sqrt(2.0/n) for relu
+  # w = np.random.randn(n) / sqrt(n) # other
+  #W1 = randn(hnodes,inodes) * inodes^(-0.5)
+  #W2 = randn(onodes,hnodes) * hnodes^(-0.5)
+  W1 = randn(hnodes,inodes) * sqrt(2.0/inodes)
+  W2 = randn(onodes,hnodes) * sqrt(2.0/hnodes)
+  # Initializing the biases as 0's
+  b1 = zeros(hnodes,1)
+  b2 = zeros(onodes,1)
+
 
 # inpout for a normal NN below
 

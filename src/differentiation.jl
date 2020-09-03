@@ -1,6 +1,7 @@
 # THE BASIC DIFFERENTIATION RULES
 # https://www.mathbootcamps.com/power-rule-derivatives/ = power-rule-derivatives
 # https://www.dummies.com/education/math/calculus/the-basic-differentiation-rules/ for dummies
+# Expand algebraic equation with exponents: https://www.youtube.com/watch?v=LQOuaYtJTXk&feature=youtu.be
 
 # The constant rule
  f(x) = 5 # 5 is a horizontal line with a slope of zero, and thus its derivative is also zero
@@ -80,8 +81,8 @@ y = 2 / x^1.5 - 4 / x^1/3
 
 # power rule is then used in the chain rule and quotient rule etc...
 
+# The product rule for derivatives
 # https://www.mathbootcamps.com/the-product-rule/ - Product rule
-
 
 # tomorrow 5.14.2019
 
@@ -119,9 +120,51 @@ f'(x) = 15(3x + 4)^4  # when multiply the inside by the outside = 5 * 3 = 15 the
 
 
 
+# The derivative of lnx and examples
+(lnx)' = 1/x
+
+-4^2
+y = 1
+-1 + -1
+
+-2 * -1
+
+
+(7*-5)^2
 
 
 
-#=============================================
+
+
+#-
 # final = https://medium.com/@pdquant/all-the-backpropagation-derivatives-d5275f727f60
-#=============================================
+#-
+
+
+#++++
+# https://www.accreditedschoolsonline.org/online-courses/math-class/
+#++++
+
+
+mPQ_x = (2-1) / (2-1)
+0
+mPX_x3 = (2 - 3) / (2 - 3)
+
+fb = 133
+fa = 113
+b = 3
+a = 1
+
+
+mPQ = (fb - fa) / (b - a)
+
+9^9
+sqrt(387420489^2)
+
+b = -2
+a = -7
+
+b - a
+M = (a + b) / 2
+
+3^2

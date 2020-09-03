@@ -175,11 +175,16 @@ function softmax(x)
 end
 
 
-class Softmax(Activation):
-    @staticmethod
-    def evaluate(z):
-        z = np.exp(z)
-        return z / np.sum(z, axis=0)
+function ReLU(x)
+    #return x*(x>0)
+    return maximum([0.0,x])
+end
+
+function ReLU_derivative(x)
+    if x <= 0
+    end
+    return 0
+end
 
 
 # Create the training function
@@ -202,28 +207,28 @@ function train(wih::Array{Float64,2}, who::Array{Float64,2},inputs::Array{Float6
     # [row, column]
     # wih dim = [200,784]
     # input dim = [784, 1]
-    hidden_inputs = (wih * inputs + bih) # hidd_input dim = [200, 1]
+    hidden_inputs = (wih * inputs)  # hidd_input dim = [200, 1]
 
     # Apply sigmoid function to each element the hidden layer output
     # hidden_inputs dim = [200, 1]
     if drop_out == false
-    hidden_outputs = sigmoid.(hidden_inputs)
+    hidden_outputs = ReLU.(hidden_inputs)
     elseif drop_out == true
-    hidden_outputs = sigmoid.(hidden_inputs)
+    hidden_outputs = ReLU.(hidden_inputs)
     hidden_outputs .= (hidden_outputs .* rand(Binomial(1,drop_out_p), hnodes)) ./ drop_out_p # Apply drop out by hidden output * 0,1's / p (1/p - scaled so we dont need to apply at test time)(inverted dropout)
     end
 
     # Apply the weights to the hidden layer outputs which then are the final layers inputs
     # who dims = [10,200]
     # hidden_outputs dims = [200, 1]
-    final_inputs = (who * hidden_outputs) + bho
+    final_inputs = (who * hidden_outputs)
 
     # Apply sigmoid function to each element the final layer output
     # final_inputs dim = [10,1]
     if drop_out == false
-    final_outputs = sigmoid.(final_inputs)
+    final_outputs = ReLU.(final_inputs)
     elseif drop_out == true
-    final_outputs = sigmoid.(final_inputs)
+    final_outputs = ReLU.(final_inputs)
     final_outputs .= (final_outputs .* rand(Binomial(1,drop_out_p), onodes)) ./ drop_out_p # Apply drop out by hidden output * 0,1's / p (1/p - scaled so we dont need to apply at test time)(inverted dropout)
 end
 
@@ -236,12 +241,11 @@ end
 
     # Update weights of the neural network - this is how the network learns by adjusting the link weights in propotation to the link weight and error.
     # update the weights for the links between the hidden and output layers
-    who .= who .+ (lr .* (output_errors .* final_outputs .* (1.0 .- final_outputs)) * hidden_outputs')
-    bho .= bho .+ (lr .* (output_errors .* final_outputs .* (1.0 .- final_outputs)) * hidden_outputs')
-
+    #who .= who .+ (lr .* (output_errors .* final_outputs .* (1.0 .- final_outputs)) * hidden_outputs')
+who .= who .+ (lr .* (output_errors .* ReLU_derivative.(final_outputs)) * hidden_outputs')
     # update the weights for the links between the input and hidden layers
-    wih .= wih .+ (lr .* (hidden_errors .* hidden_outputs .* (1.0 .- hidden_outputs)) * inputs')
-    bih .= bih .+ (lr .* (hidden_errors .* hidden_outputs .* (1.0 .- hidden_outputs)) * inputs')
+    #wih .= wih .+ (lr .* (hidden_errors .* hidden_outputs .* (1.0 .- hidden_outputs)) * inputs')
+    wih .= wih .+ (lr .* (hidden_errors .* ReLU_derivative.(hidden_outputs)) * inputs')
 
     return(wih, who, final_outputs)
 end
@@ -318,8 +322,7 @@ onodes = output_nodes
 # As randn generates numbers from a standard normal distribution we have to multiply by the standard deviation
 wih = randn(hnodes,inodes) * inodes^(-0.5)
 who = randn(onodes,hnodes) * hnodes^(-0.5)
-bih = zero(wih)
-bho = zero(who)
+
 
 # Train the neural network
 # 4.22.2019 - Add functinality to save the numbers which the network did not get correct
